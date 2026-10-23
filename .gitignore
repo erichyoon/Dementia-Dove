@@ -1,0 +1,13 @@
+.DS_Store
+.arduino-build/
+companion-app/node_modules/
+companion-app/.expo/
+companion-app/dist/
+companion-app/web-build/
+companion-app/cloud/sessions.json
+Arduino/examples/omar_buttons/voice_raw/
+*.pem
+.env
+.env.*
+*.orig.*
+npm-debug.*
