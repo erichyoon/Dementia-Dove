@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { isValidDeviceOpticalCode } from '../constants/opticalCode';
 import { colors, shadow } from '../theme';
 import { FolderCard } from './FolderCard';
+import { getProfile } from '../services/profileStorage';
 
 interface Props {
   isPaired: boolean;
@@ -17,6 +18,11 @@ export const LabTab: React.FC<Props> = ({ isPaired, onPairSuccess, onResetPairin
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [detectedCode, setDetectedCode] = useState<string | null>(null);
   const [rejectMessage, setRejectMessage] = useState<string | null>(null);
+  const [patientName, setPatientName] = useState('Omar Firdaus');
+
+  useEffect(() => {
+    getProfile().then((profile) => setPatientName(profile.name));
+  }, [isPaired]);
 
   const scanLineAnim = useRef(new Animated.Value(0)).current;
   const lockScaleAnim = useRef(new Animated.Value(1)).current;
@@ -115,7 +121,7 @@ export const LabTab: React.FC<Props> = ({ isPaired, onPairSuccess, onResetPairin
               <Text style={styles.pairedBadgeText}>Exam active</Text>
             </View>
             <Text style={styles.patientInfoTitle}>Sent to hardware</Text>
-            <Text style={styles.patientInfoRow}>Omar Firdaus · #PT-8F24</Text>
+            <Text style={styles.patientInfoRow}>{patientName} · #PT-8F24</Text>
             <Text style={styles.patientInfoRow}>RECALL speech exam · T0–T5</Text>
             <Text style={styles.pairedSubtext}>
               Put the phone away. Follow the round screen and spoken prompts. Tap Start, then Done, on each task.
@@ -298,17 +304,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow.hard,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: colors.ink,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#ffffff',
-    letterSpacing: 2,
   },
   subtitle: {
     fontSize: 11,

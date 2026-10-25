@@ -5,6 +5,11 @@ companion-app/.expo/
 companion-app/dist/
 companion-app/web-build/
 companion-app/cloud/sessions.json
+companion-app/cloud/groups.json
+companion-app/cloud/audio/
+speech-model/temp_uploads/
+__pycache__/
+speech-model/**/__pycache__/
 Arduino/examples/omar_buttons/voice_raw/
 *.pem
 .env

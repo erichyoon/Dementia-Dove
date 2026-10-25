@@ -7,27 +7,27 @@ export interface ChatMessage {
 }
 
 export const CHAT_STARTERS = [
-  'How do I start the exam?',
-  'What are the six tasks?',
-  'What is on the screen for T2?',
-  'Find a clinic',
+  { label: 'Start the exam', text: 'How do I start the exam?' },
+  { label: 'Six tasks', text: 'What are the six tasks?' },
+  { label: 'Task T2', text: 'What is on the screen for T2?' },
+  { label: 'Caregivers', text: 'Find a caregiver' },
 ];
 
 function includesAny(hay: string, needles: string[]) {
   return needles.some((n) => hay.includes(n));
 }
 
-export function replyToPatient(input: string, isPaired: boolean): string {
+export function replyToPatient(input: string, isPaired: boolean, name = 'Omar'): string {
   const q = input.toLowerCase().trim();
 
   if (includesAny(q, ['hello', 'hi', 'hey', 'good morning', 'good afternoon'])) {
-    return 'Hi Omar. I can walk you through the RECALL exam, pairing, clinics, or mind games. What do you need?';
+    return `Hi ${name}. I can walk you through the RECALL exam, pairing, caregivers, groups, or mind games. What do you need?`;
   }
 
   if (includesAny(q, ['pair', 'scan', 'qr', 'code', 'lab'])) {
     return isPaired
       ? 'You are already paired. Put the phone away and follow Start / Done on the round screen.'
-      : 'Open Lab, point the camera at the particle code on the device, and wait for a match. The spoken exam starts by itself after a valid scan.';
+      : 'Open Screen and stay on Screening. Point the camera at the particle code on the device, and wait for a match. The spoken exam starts by itself after a valid scan.';
   }
 
   if (includesAny(q, ['t0', 'quiet', 'room tone', 'noise'])) {
@@ -58,21 +58,25 @@ export function replyToPatient(input: string, isPaired: boolean): string {
     return 'RECALL is six self-guided speaking tasks in order: quiet (T0), ahh ×3 (T1), read the on-screen sentence (T2), describe the on-screen picture (T3), animals (T4), then a short story (T5). Follow the voice and tap Start then Done.';
   }
 
-  if (includesAny(q, ['clinic', 'doctor', 'map', 'appointment', 'near'])) {
-    return 'Open the Clinics tab. It uses your location to list nearby clinics, show them on a map, and let you book a time slot.';
+  if (includesAny(q, ['support group', 'support groups', 'care circle', 'groups'])) {
+    return 'Open Groups. The care circle is family and caregivers you add on this phone. A support group appears only after someone creates it, and then other people on the app can join.';
+  }
+
+  if (includesAny(q, ['clinic', 'doctor', 'caregiver', 'map', 'appointment', 'near'])) {
+    return 'Open Nearby. It lists dementia caregivers around you, shows them on a map, and lets you book a time slot.';
   }
 
   if (includesAny(q, ['game', 'memory', 'mind', 'puzzle'])) {
-    return 'Mind Games has three short drills: Memory Match, Sequence, and Animal Scramble. They are on-phone only and do not change the hardware exam.';
+    return 'Mind Games has three short drills: Memory Match, Sequence, and Animal Scramble. Open them from Dashboard. They stay on this phone and do not change the hardware exam.';
   }
 
   if (includesAny(q, ['usb', 'cloud', 'session', 'result', 'score'])) {
-    return 'Keep USB plugged into the computer running the app relay. When you finish T5, a RECALL session log is saved to Analytics. No SD card is used.';
+    return 'Keep USB plugged into the computer running the app relay. When you finish T5, the session is saved under Screen, on Progress. No SD card is used.';
   }
 
   if (includesAny(q, ['thank'])) {
     return 'Glad to help. Tap Start on the device when you are ready.';
   }
 
-  return 'I can help with pairing, each RECALL task, clinics, or mind games. Try “How do I start the exam?” or “What is T2?”';
+  return 'I can help with pairing, each RECALL task, caregivers, groups, or mind games. Try “How do I start the exam?” or “What is T2?”';
 }

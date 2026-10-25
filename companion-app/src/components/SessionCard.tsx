@@ -3,9 +3,30 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SessionRecord } from '../types/session';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadow } from '../theme';
+import { sessionDateLabel } from '../services/days';
 
 interface Props {
   session: SessionRecord;
+}
+
+function voiceLine(session: SessionRecord): string | null {
+  if (session.voicePrediction && session.voiceConfidence) {
+    const mark = session.voiceStatus === 'truncated' ? ' · clip cut at 150s' : '';
+    return `${session.voicePrediction} · ${session.voiceConfidence.alzheimer}% Alzheimer${mark}`;
+  }
+  if (session.voiceStatus === 'unscored') return 'Voice recorded · model not running';
+  return null;
+}
+
+function voiceDetail(session: SessionRecord): string {
+  const features = session.voiceFeatures;
+  const summary = voiceLine(session) || 'No voice score';
+  if (!features) return summary;
+  return [
+    summary,
+    `${features.duration}s · ${features.pause_count} pauses · ${features.speech_rate}/s speech`,
+    `Pitch ${features.pitch_mean} Hz · ${features.silence_ratio}% silence`,
+  ].join('\n');
 }
 
 export const SessionCard: React.FC<Props> = ({ session }) => {
@@ -26,9 +47,10 @@ export const SessionCard: React.FC<Props> = ({ session }) => {
           </View>
           <View>
             <Text style={styles.sessionDate}>
-              {session.dateStr} • {session.timeStr}
+              {sessionDateLabel(session)} • {session.timeStr}
             </Text>
             <Text style={styles.sessionDuration}>{durationMin} min duration</Text>
+            {voiceLine(session) ? <Text style={styles.voiceLine}>{voiceLine(session)}</Text> : null}
           </View>
         </View>
 
@@ -52,6 +74,13 @@ export const SessionCard: React.FC<Props> = ({ session }) => {
             <Text style={styles.feedbackLabel}>DOCTOR / SYSTEM NOTE:</Text>
             <Text style={styles.feedbackText}>{session.patientFeedback}</Text>
           </View>
+
+          {session.voiceStatus ? (
+            <View style={styles.feedbackBox}>
+              <Text style={styles.feedbackLabel}>VOICE MODEL</Text>
+              <Text style={styles.feedbackText}>{voiceDetail(session)}</Text>
+            </View>
+          ) : null}
 
           {/* 3 Metric Pills */}
           <View style={styles.metricsRow}>
@@ -140,6 +169,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 2,
     fontWeight: '600',
+  },
+  voiceLine: {
+    fontSize: 12,
+    color: colors.ink,
+    marginTop: 4,
+    fontWeight: '800',
   },
   headerRight: {
     flexDirection: 'row',

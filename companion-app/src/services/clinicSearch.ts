@@ -40,6 +40,8 @@ function haversineKm(a: GeoPoint, b: GeoPoint): number {
   return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+type PlaceProps = Record<string, any>;
+
 function kindFromValue(value: string): string {
   const v = value.toLowerCase();
   if (v === 'hospital') return 'Hospital';
@@ -49,11 +51,65 @@ function kindFromValue(value: string): string {
   return 'Care';
 }
 
-function isClinicPlace(props: Record<string, any>): boolean {
-  const key = String(props.osm_key || '');
-  const value = String(props.osm_value || '');
-  if (!['amenity', 'healthcare'].includes(key)) return false;
-  return /clinic|hospital|doctor|centre|center/.test(value);
+function placeBlob(props: PlaceProps): string {
+  return [props.name, props.osm_key, props.osm_value, props.street, props.city]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function isUnrelatedPlace(props: PlaceProps): boolean {
+  const key = String(props.osm_key || '').toLowerCase();
+  const value = String(props.osm_value || '').toLowerCase();
+  if (key === 'highway' || key === 'tourism' || key === 'shop') return true;
+  return /restaurant|cafe|bar|fast_food|fuel|parking|hotel/.test(value);
+}
+
+const CAREGIVER_HINT =
+  /memory|dementia|alzheimer|geriatric|caregiver|nursing|assisted|home care|home health|senior|elder|hospice|care home/;
+const HEALTH_VALUE =
+  /clinic|hospital|doctor|centre|center|nursing|social_facility|health|care_home|assisted|hospice/;
+
+function isCaregiverPlace(props: PlaceProps): boolean {
+  if (isUnrelatedPlace(props)) return false;
+  if (CAREGIVER_HINT.test(placeBlob(props))) return true;
+  const key = String(props.osm_key || '').toLowerCase();
+  const value = String(props.osm_value || '').toLowerCase();
+  if (key === 'social_facility') return true;
+  return ['amenity', 'healthcare', 'social_facility'].includes(key) && HEALTH_VALUE.test(value);
+}
+
+const SUPPORT_HINT =
+  /support|alzheimer|dementia|caregiver|senior|community centre|community center|adult day|day program|respite|memory/;
+
+function isSupportGroupPlace(props: PlaceProps): boolean {
+  if (isUnrelatedPlace(props)) return false;
+  const value = String(props.osm_value || '').toLowerCase();
+  if (SUPPORT_HINT.test(placeBlob(props))) return true;
+  return /social_facility|community_centre|community_center/.test(value);
+}
+
+function caregiverKind(props: PlaceProps): string {
+  const blob = placeBlob(props);
+  if (/alzheimer|dementia|memory/.test(blob)) return 'Memory care';
+  if (/geriatric/.test(blob)) return 'Geriatric';
+  if (/home care|home health|homecare/.test(blob)) return 'Home care';
+  if (/nursing/.test(blob)) return 'Nursing home';
+  if (/hospice/.test(blob)) return 'Hospice';
+  return kindFromValue(String(props.osm_value || ''));
+}
+
+function supportKind(props: PlaceProps): string {
+  const blob = placeBlob(props);
+  if (/alzheimer|dementia|memory/.test(blob)) return 'Dementia support';
+  if (/caregiver/.test(blob)) return 'Caregiver group';
+  if (/senior/.test(blob)) return 'Senior center';
+  return 'Support group';
+}
+
+function phoneFrom(props: PlaceProps): string | undefined {
+  const raw = props.phone || props.extra?.phone;
+  return raw ? String(raw) : undefined;
 }
 
 export async function geocodeCity(query: string): Promise<{ point: GeoPoint; label: string } | null> {
@@ -87,8 +143,12 @@ export async function reverseGeocodeLabel(point: GeoPoint): Promise<string> {
   }
 }
 
-export async function findClinicsNear(point: GeoPoint): Promise<NearbyClinic[]> {
-  const terms = ['clinic', 'hospital', 'urgent care', 'doctors'];
+async function searchPlaces(
+  point: GeoPoint,
+  terms: string[],
+  accept: (props: PlaceProps) => boolean,
+  kindFor: (props: PlaceProps) => string
+): Promise<NearbyClinic[]> {
   const batches = await Promise.all(
     terms.map(async (term) => {
       const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(term)}&lat=${point.latitude}&lon=${point.longitude}&limit=20`;
@@ -109,12 +169,12 @@ export async function findClinicsNear(point: GeoPoint): Promise<NearbyClinic[]> 
   );
 
   const seen = new Set<string>();
-  const clinics: NearbyClinic[] = [];
+  const places: NearbyClinic[] = [];
 
   for (const feature of batches.flat()) {
     const props = feature.properties || {};
     const coords = feature.geometry?.coordinates;
-    if (!isClinicPlace(props) || !props.name || !coords) continue;
+    if (!accept(props) || !props.name || !coords) continue;
     const longitude = coords[0];
     const latitude = coords[1];
     const key = `${props.name}|${latitude.toFixed(4)}|${longitude.toFixed(4)}`;
@@ -123,18 +183,37 @@ export async function findClinicsNear(point: GeoPoint): Promise<NearbyClinic[]> 
     const line = [props.housenumber, props.street].filter(Boolean).join(' ');
     const address = [line, props.city, props.state].filter(Boolean).join(', ') || 'Address not listed';
     const { rating, reviewCount } = clinicRating(String(props.osm_id), props.name);
-    clinics.push({
-      id: String(props.osm_id),
+    places.push({
+      id: String(props.osm_id || key),
       name: props.name,
-      kind: kindFromValue(props.osm_value || ''),
+      kind: kindFor(props),
       address,
       distanceKm: haversineKm(point, { latitude, longitude }),
       latitude,
       longitude,
+      phone: phoneFrom(props),
       rating,
       reviewCount,
     });
   }
 
-  return clinics.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 20);
+  return places.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 20);
+}
+
+export async function findClinicsNear(point: GeoPoint): Promise<NearbyClinic[]> {
+  return searchPlaces(
+    point,
+    ['memory care', 'dementia', 'alzheimer', 'geriatric', 'home care'],
+    isCaregiverPlace,
+    caregiverKind
+  );
+}
+
+export async function findSupportGroupsNear(point: GeoPoint): Promise<NearbyClinic[]> {
+  return searchPlaces(
+    point,
+    ['alzheimer support', 'dementia support group', 'caregiver support'],
+    isSupportGroupPlace,
+    supportKind
+  );
 }

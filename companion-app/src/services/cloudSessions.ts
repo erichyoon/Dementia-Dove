@@ -44,6 +44,10 @@ function normalizeSession(data: any): SessionRecord {
     avgReactionTimeMs: data.avgReactionTimeMs || 0,
     patientFeedback: data.patientFeedback || 'RECALL speech exam uploaded from hardware.',
     timeline: data.timeline || [],
+    voicePrediction: data.voicePrediction,
+    voiceConfidence: data.voiceConfidence,
+    voiceFeatures: data.voiceFeatures,
+    voiceStatus: data.voiceStatus,
   };
 }
 
@@ -61,6 +65,12 @@ async function tryFetch(url: string, init?: RequestInit): Promise<Response | nul
 }
 
 export async function fetchCloudSessions(): Promise<SessionRecord[]> {
+  const pulled = await pullCloudSessions();
+  return pulled ?? [];
+}
+
+/** Sessions from the exam relay, or null when no relay answered. */
+export async function pullCloudSessions(): Promise<SessionRecord[] | null> {
   for (const host of cloudHosts()) {
     const response = await tryFetch(`http://${host}:${CLOUD_PORT}/cloud/sessions`, {
       headers: { Accept: 'application/json' },
@@ -70,7 +80,7 @@ export async function fetchCloudSessions(): Promise<SessionRecord[]> {
     const list = Array.isArray(data.sessions) ? data.sessions : Array.isArray(data) ? data : [];
     return list.map(normalizeSession);
   }
-  return [];
+  return null;
 }
 
 export async function uploadSessionToCloud(session: SessionRecord): Promise<boolean> {

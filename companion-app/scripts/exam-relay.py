@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""USB serial + exam cloud: start exam, capture SESSION_JSON, store sessions."""
+"""USB serial + exam cloud: start exam, capture SESSION_JSON, score the WAV."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import glob
 import json
@@ -8,10 +8,15 @@ import sys
 import termios
 import threading
 import time
+import urllib.error
+import urllib.request
 
 PORT = 3847
+MODEL_URL = "http://127.0.0.1:5050/api/predict"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CLOUD_PATH = os.path.join(ROOT, "cloud", "sessions.json")
+GROUPS_PATH = os.path.join(ROOT, "cloud", "groups.json")
+AUDIO_DIR = os.path.join(ROOT, "cloud", "audio")
 
 _serial_lock = threading.Lock()
 _serial_fd = None
@@ -112,8 +117,83 @@ def send_start_exam():
             return False
 
 
+def score_wav(path):
+    boundary = "----recallwav"
+    filename = os.path.basename(path)
+    with open(path, "rb") as handle:
+        payload = handle.read()
+    body = b"".join([
+        f"--{boundary}\r\n".encode(),
+        f'Content-Disposition: form-data; name="audio"; filename="{filename}"\r\n'.encode(),
+        b"Content-Type: audio/wav\r\n\r\n",
+        payload,
+        f"\r\n--{boundary}--\r\n".encode(),
+    ])
+    request = urllib.request.Request(
+        MODEL_URL,
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as err:
+        print(f"[relay] model unscored: {err}")
+        return None
+
+
+def attach_voice_result(session_id, wav):
+    os.makedirs(AUDIO_DIR, exist_ok=True)
+    safe_id = "".join(ch for ch in session_id if ch.isalnum() or ch in "-_") or "session"
+    path = os.path.join(AUDIO_DIR, f"{safe_id}.wav")
+    with open(path, "wb") as handle:
+        handle.write(wav)
+    print(f"[relay] saved {path} ({len(wav)} bytes)")
+
+    result = score_wav(path)
+    data = load_cloud()
+    sessions = data.get("sessions") or []
+    found = next((row for row in sessions if row.get("id") == session_id), None)
+    if found is None:
+        found = {"id": session_id}
+        sessions.insert(0, found)
+    if result is None:
+        found["voiceStatus"] = "unscored"
+    else:
+        found["voiceStatus"] = "truncated" if found.get("audioTruncated") else "scored"
+        found["voicePrediction"] = result.get("prediction")
+        found["voiceConfidence"] = result.get("confidence")
+        found["voiceFeatures"] = result.get("features")
+    data["sessions"] = sessions[:50]
+    save_cloud(data)
+    print(f"[relay] {session_id} voice {found.get('voiceStatus')} {found.get('voicePrediction') or ''}")
+
+
+def handle_serial_line(text):
+    if text.startswith("SESSION_JSON:"):
+        raw = text[len("SESSION_JSON:") :]
+        try:
+            upsert_session(json.loads(raw))
+        except json.JSONDecodeError as err:
+            print(f"[cloud] bad JSON: {err}")
+        return None
+    if text.startswith("AUDIO_BEGIN "):
+        parts = text.split()
+        if len(parts) == 3 and parts[2].isdigit():
+            return parts[1], int(parts[2])
+        print(f"[relay] bad AUDIO_BEGIN {text}")
+        return None
+    if "START_EXAM" in text or "EXAMINATION" in text or "[VOICE]" in text or "[RECALL]" in text:
+        print(f"[relay] {text}")
+    return None
+
+
 def serial_reader():
     buf = b""
+    audio_id = None
+    audio_need = 0
+    audio_buf = b""
     while True:
         with _serial_lock:
             fd = ensure_serial()
@@ -121,9 +201,9 @@ def serial_reader():
             time.sleep(1)
             continue
         try:
-            chunk = os.read(fd, 1024)
+            chunk = os.read(fd, 4096)
         except BlockingIOError:
-            time.sleep(0.05)
+            time.sleep(0.02)
             continue
         except OSError:
             with _serial_lock:
@@ -131,20 +211,113 @@ def serial_reader():
             time.sleep(0.5)
             continue
         if not chunk:
-            time.sleep(0.05)
+            time.sleep(0.02)
             continue
         buf += chunk
-        while b"\n" in buf:
+        while True:
+            if audio_need:
+                if len(buf) < audio_need:
+                    audio_buf += buf
+                    audio_need -= len(buf)
+                    buf = b""
+                    break
+                audio_buf += buf[:audio_need]
+                buf = buf[audio_need:]
+                attach_voice_result(audio_id, audio_buf)
+                audio_id = None
+                audio_need = 0
+                audio_buf = b""
+                continue
+            if b"\n" not in buf:
+                break
             line, buf = buf.split(b"\n", 1)
             text = line.decode("utf-8", "ignore").strip()
-            if text.startswith("SESSION_JSON:"):
-                raw = text[len("SESSION_JSON:") :]
-                try:
-                    upsert_session(json.loads(raw))
-                except json.JSONDecodeError as err:
-                    print(f"[cloud] bad JSON: {err}")
-            elif "START_EXAM" in text or "EXAMINATION" in text or "[VOICE]" in text:
-                print(f"[relay] {text}")
+            if not text:
+                continue
+            begun = handle_serial_line(text)
+            if begun:
+                audio_id, audio_need = begun
+                audio_buf = b""
+
+
+_groups_lock = threading.Lock()
+
+
+def load_groups():
+    if not os.path.exists(GROUPS_PATH):
+        return []
+    try:
+        with open(GROUPS_PATH, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return []
+    groups = data.get("groups") if isinstance(data, dict) else None
+    return groups if isinstance(groups, list) else []
+
+
+def save_groups(groups):
+    os.makedirs(os.path.dirname(GROUPS_PATH), exist_ok=True)
+    with open(GROUPS_PATH, "w", encoding="utf-8") as handle:
+        json.dump({"groups": groups}, handle)
+
+
+def _clean_member(payload):
+    member_id = str(payload.get("memberId") or "").strip()[:40]
+    name = str(payload.get("memberName") or "Member").strip()[:80] or "Member"
+    if not member_id:
+        return None
+    return {"id": member_id, "name": name}
+
+
+def mutate_groups(payload):
+    action = payload.get("action")
+    with _groups_lock:
+        groups = load_groups()
+        if action == "create":
+            member = _clean_member(payload)
+            name = str(payload.get("name") or "").strip()[:80]
+            if not member or not name:
+                return None
+            note = str(payload.get("note") or "").strip()[:500]
+            mark = str(payload.get("mark") or "").strip()[:16]
+            image = str(payload.get("image") or "")
+            if not image.startswith("data:image/") or len(image) > 180000:
+                image = ""
+            groups.append({
+                "id": f"grp-{int(time.time() * 1000)}",
+                "name": name,
+                "note": note,
+                "mark": mark,
+                "image": image,
+                "createdAt": int(time.time() * 1000),
+                "createdBy": member["id"],
+                "members": [member],
+            })
+        elif action == "delete":
+            member = _clean_member(payload)
+            group_id = str(payload.get("groupId") or "")
+            group = next((item for item in groups if item.get("id") == group_id), None)
+            if not member or not group:
+                return None
+            members = group.get("members") or []
+            creator = group.get("createdBy") or (members[0].get("id") if members else None)
+            if creator != member["id"]:
+                return None
+            groups = [item for item in groups if item.get("id") != group_id]
+        elif action in ("join", "leave"):
+            member = _clean_member(payload)
+            group_id = str(payload.get("groupId") or "")
+            group = next((item for item in groups if item.get("id") == group_id), None)
+            if not member or not group:
+                return None
+            members = [item for item in group.get("members", []) if item.get("id") != member["id"]]
+            if action == "join":
+                members.append(member)
+            group["members"] = members
+        else:
+            return None
+        save_groups(groups)
+        return groups
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -172,6 +345,9 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/cloud/sessions", "/sessions"):
             self._send(200, load_cloud())
             return
+        if path == "/cloud/groups":
+            self._send(200, {"groups": load_groups()})
+            return
         ok = send_start_exam()
         self._send(200 if ok else 503, {"status": "started" if ok else "no-serial"})
 
@@ -187,6 +363,18 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send(200, upsert_session(session))
             return
+        if path == "/cloud/groups":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                self._send(400, {"error": "invalid json"})
+                return
+            groups = mutate_groups(payload if isinstance(payload, dict) else {})
+            if groups is None:
+                self._send(400, {"error": "could not update groups"})
+                return
+            self._send(200, {"groups": groups})
+            return
         ok = send_start_exam()
         self._send(200 if ok else 503, {"status": "started" if ok else "no-serial"})
 
@@ -198,5 +386,6 @@ if __name__ == "__main__":
     os.makedirs(os.path.dirname(CLOUD_PATH), exist_ok=True)
     threading.Thread(target=serial_reader, daemon=True).start()
     print(f"[relay] cloud {CLOUD_PATH}")
+    print(f"[relay] model {MODEL_URL}")
     print(f"[relay] listening on 0.0.0.0:{PORT}  serial={find_port() or 'none'}")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

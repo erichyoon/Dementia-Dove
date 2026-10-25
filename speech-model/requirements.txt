@@ -1,0 +1,11 @@
+flask==3.0.0
+flask-cors==4.0.0
+gunicorn==21.2.0
+
+numpy==2.4.6
+scipy==1.17.1
+scikit-learn==1.8.0
+librosa==0.10.2.post1
+numba==0.68.0
+llvmlite==0.50.0
+soundfile==0.14.0

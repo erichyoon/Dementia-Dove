@@ -9,7 +9,11 @@ const INITIAL_STARTER_SESSIONS: SessionRecord[] = [
   {
     id: 'sess-101',
     timestamp: Date.now() - 86400000 * 2, // 2 days ago
-    dateStr: 'Oct 14, 2026',
+    dateStr: new Date(Date.now() - 86400000 * 2).toLocaleDateString([], {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }),
     timeStr: '10:30 AM',
     durationSeconds: 600, // 10 mins
     completionStatus: 'completed',
@@ -29,7 +33,11 @@ const INITIAL_STARTER_SESSIONS: SessionRecord[] = [
   {
     id: 'sess-102',
     timestamp: Date.now() - 86400000, // Yesterday
-    dateStr: 'Yesterday',
+    dateStr: new Date(Date.now() - 86400000).toLocaleDateString([], {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }),
     timeStr: '02:15 PM',
     durationSeconds: 720, // 12 mins
     completionStatus: 'completed',

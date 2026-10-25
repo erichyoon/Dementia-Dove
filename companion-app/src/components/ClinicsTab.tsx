@@ -183,11 +183,11 @@ export const ClinicsTab: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Care nearby.{'\n'}Walk in anytime.</Text>
+        <Text style={styles.title}>Caregivers{'\n'}near you.</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel={showMap ? 'Show clinic list' : 'View clinics on map'}
+            accessibilityLabel={showMap ? 'Show caregiver list' : 'View caregivers on map'}
             style={[styles.refreshBtn, showMap && styles.refreshBtnOn]}
             onPress={() => setShowMap((value) => !value)}
             activeOpacity={0.85}
@@ -221,7 +221,7 @@ export const ClinicsTab: React.FC = () => {
               <Text style={styles.locationKicker}>Your location</Text>
               <Text style={styles.locationValue}>
                 {status === 'locating' && 'Asking for location…'}
-                {status === 'searching' && 'Searching clinics around you…'}
+                {status === 'searching' && 'Searching caregivers around you…'}
                 {status === 'ready' && (placeLabel || `${point?.latitude.toFixed(3)}, ${point?.longitude.toFixed(3)}`)}
                 {status === 'denied' && 'Location is turned off'}
                 {status === 'error' && 'Location unavailable'}
@@ -235,7 +235,7 @@ export const ClinicsTab: React.FC = () => {
           <View style={styles.loadingBox}>
             <ActivityIndicator color={colors.accent} />
             <Text style={styles.loadingText}>
-              {status === 'locating' ? 'Accessing your location' : 'Finding clinics within 6 km'}
+              {status === 'locating' ? 'Accessing your location' : 'Finding caregivers near you'}
             </Text>
           </View>
         )}
@@ -281,19 +281,19 @@ export const ClinicsTab: React.FC = () => {
                 </View>
                 <View style={styles.legendItem}>
                   <View style={styles.clinicDot} />
-                  <Text style={styles.legendText}>Clinic</Text>
+                  <Text style={styles.legendText}>Care</Text>
                 </View>
               </View>
-              <ClinicsMap center={point} clinics={clinics} />
+              <ClinicsMap center={point} clinics={clinics} title="Caregivers map" />
             </View>
           </FolderCard>
         )}
 
         {status === 'ready' && clinics.length === 0 && (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No clinics in range</Text>
+            <Text style={styles.emptyTitle}>No caregivers in range</Text>
             <Text style={styles.emptyDesc}>
-              Nothing mapped within 6 km of this spot. Move closer to a town center and search again.
+              Nothing mapped near this spot. Try another city or search again.
             </Text>
           </View>
         )}

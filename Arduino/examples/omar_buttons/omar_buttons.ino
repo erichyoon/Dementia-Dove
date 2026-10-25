@@ -373,6 +373,7 @@ void exam_begin_session(void)
     memset(t1_ended_at, 0, sizeof(t1_ended_at));
 
     Serial.printf("[RECALL] begin %s for %s\n", session_id, patient_name);
+    voice_capture_reset();
     voice_stop();
     voice_play(VOICE_WELCOME);
     exam_show_task(0, true);
@@ -386,6 +387,8 @@ void exam_on_start(void)
     task_start_ms = now;
     task_started_at[exam_task] = now;
     if (exam_task == 1) t1_started_at[t1_attempt] = now;
+    voice_stop();
+    voice_capture_begin();
     exam_phase = PHASE_RECORDING;
     Serial.printf("[RECALL] %s START%s\n", TASK_CODES[exam_task],
         exam_task == 1 ? " attempt" : "");
@@ -404,6 +407,7 @@ void exam_advance_after_task(void)
 void exam_on_done(void)
 {
     if (current_mode != MODE_EXAMINATION || exam_phase != PHASE_RECORDING) return;
+    voice_capture_end();
     unsigned long now = millis();
     task_ended_at[exam_task] = now;
     if (exam_task == 1) {
@@ -422,6 +426,28 @@ void exam_on_done(void)
     exam_advance_after_task();
 }
 
+static void send_capture_over_usb(void)
+{
+    size_t nbytes = 0;
+    const uint8_t *wav = voice_capture_wav(&nbytes);
+    if (!wav || nbytes < 44) return;
+    Serial.printf("AUDIO_BEGIN %s %u\n", session_id, (unsigned)nbytes);
+    Serial.flush();
+    size_t sent = 0;
+    while (sent < nbytes) {
+        size_t chunk = nbytes - sent;
+        if (chunk > 2048) chunk = 2048;
+        size_t wrote = Serial.write(wav + sent, chunk);
+        if (wrote == 0) {
+            delay(1);
+            continue;
+        }
+        sent += wrote;
+        if ((sent & 0x7fffu) == 0) yield();
+    }
+    Serial.flush();
+}
+
 void exam_finish_session(void)
 {
     exam_phase = PHASE_COMPLETE;
@@ -434,10 +460,12 @@ void exam_finish_session(void)
     uint32_t score = (uint32_t)((6 * 100 + valid_ahh * 10) / 7);
     if (score > 99) score = 99;
 
-    char json_buf[1600];
+    char json_buf[1800];
+    const char *storage = voice_capture_pcm_bytes() > 0 ? "usb" : "none";
+    const char *truncated = voice_capture_truncated() ? "true" : "false";
     snprintf(json_buf, sizeof(json_buf),
-        "{\"id\":\"%s\",\"examType\":\"RECALL Speech Exam\",\"patientName\":\"%s\",\"patientId\":\"%s\",\"timestamp\":%lu,\"dateStr\":\"Today\",\"timeStr\":\"Live\",\"durationSeconds\":%lu,\"score\":%lu,\"buttonPresses\":%lu,\"touchInteractions\":%lu,\"avgReactionTimeMs\":0,\"completionStatus\":\"completed\",\"audioStorage\":\"none\",\"clippingCounts\":0,\"bufferOverruns\":0,\"patientFeedback\":\"Self-guided RECALL %s: T0 quiet, T1 ahh %d/3, T2 on-screen sentence, T3 on-screen picture, T4 fluency, T5 narrative.\",\"tasks\":[{\"id\":\"T0\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u,\"skipReason\":\"%s\"},{\"id\":\"T1\",\"attempts\":[{\"n\":1,\"valid\":%s,\"startedMs\":%lu,\"endedMs\":%lu},{\"n\":2,\"valid\":%s,\"startedMs\":%lu,\"endedMs\":%lu},{\"n\":3,\"valid\":%s,\"startedMs\":%lu,\"endedMs\":%lu}],\"restarts\":%u},{\"id\":\"T2\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u},{\"id\":\"T3\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u},{\"id\":\"T4\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u},{\"id\":\"T5\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u}],\"timeline\":[{\"minute\":1,\"activityLevel\":40},{\"minute\":3,\"activityLevel\":70},{\"minute\":5,\"activityLevel\":88}]}",
-        session_id, patient_name, patient_id, millis(), duration_sec, score, button_count, touch_count, session_id, valid_ahh,
+        "{\"id\":\"%s\",\"examType\":\"RECALL Speech Exam\",\"patientName\":\"%s\",\"patientId\":\"%s\",\"timestamp\":%lu,\"dateStr\":\"Today\",\"timeStr\":\"Live\",\"durationSeconds\":%lu,\"score\":%lu,\"buttonPresses\":%lu,\"touchInteractions\":%lu,\"avgReactionTimeMs\":0,\"completionStatus\":\"completed\",\"audioStorage\":\"%s\",\"audioTruncated\":%s,\"clippingCounts\":0,\"bufferOverruns\":0,\"patientFeedback\":\"Self-guided RECALL %s: T0 quiet, T1 ahh %d/3, T2 on-screen sentence, T3 on-screen picture, T4 fluency, T5 narrative.\",\"tasks\":[{\"id\":\"T0\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u,\"skipReason\":\"%s\"},{\"id\":\"T1\",\"attempts\":[{\"n\":1,\"valid\":%s,\"startedMs\":%lu,\"endedMs\":%lu},{\"n\":2,\"valid\":%s,\"startedMs\":%lu,\"endedMs\":%lu},{\"n\":3,\"valid\":%s,\"startedMs\":%lu,\"endedMs\":%lu}],\"restarts\":%u},{\"id\":\"T2\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u},{\"id\":\"T3\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u},{\"id\":\"T4\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u},{\"id\":\"T5\",\"startedMs\":%lu,\"endedMs\":%lu,\"restarts\":%u}],\"timeline\":[{\"minute\":1,\"activityLevel\":40},{\"minute\":3,\"activityLevel\":70},{\"minute\":5,\"activityLevel\":88}]}",
+        session_id, patient_name, patient_id, millis(), duration_sec, score, button_count, touch_count, storage, truncated, session_id, valid_ahh,
         task_started_at[0], task_ended_at[0], task_restarts[0], skip_reasons[0],
         t1_valid[0] ? "true" : "false", t1_started_at[0], t1_ended_at[0],
         t1_valid[1] ? "true" : "false", t1_started_at[1], t1_ended_at[1],
@@ -454,6 +482,7 @@ void exam_finish_session(void)
     Serial.print("SESSION_JSON:");
     Serial.println(last_session_json);
     Serial.println("-------------------------------------\n");
+    send_capture_over_usb();
 
     voice_play(VOICE_DONE);
     exam_refresh_ui();
@@ -763,6 +792,7 @@ void loop()
     }
 
     voice_service();
+    voice_capture_service();
     server.handleClient();
     exam_service();
 

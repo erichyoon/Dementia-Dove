@@ -5,6 +5,21 @@ export interface TimelinePoint {
   activityLevel: number; // 0 - 100
 }
 
+export type VoiceStatus = 'scored' | 'truncated' | 'unscored';
+
+export interface VoiceConfidence {
+  healthy: number;
+  alzheimer: number;
+}
+
+export interface VoiceFeatures {
+  duration: number;
+  pause_count: number;
+  speech_rate: number;
+  pitch_mean: number;
+  silence_ratio: number;
+}
+
 export interface SessionRecord {
   id: string;
   timestamp: number;
@@ -18,6 +33,10 @@ export interface SessionRecord {
   avgReactionTimeMs: number; // Average response time in ms
   patientFeedback: string; // Plain-English takeaway for the patient
   timeline: TimelinePoint[];
+  voicePrediction?: string;
+  voiceConfidence?: VoiceConfidence;
+  voiceFeatures?: VoiceFeatures;
+  voiceStatus?: VoiceStatus;
 }
 
 export interface PatientSummaryStats {

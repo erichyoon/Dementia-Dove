@@ -12,12 +12,14 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSLocationWhenInUseUsageDescription": "Used to find clinics and hospitals near you."
+        "NSLocationWhenInUseUsageDescription": "Used to find dementia caregivers and support groups near you."
       }
     },
     "android": {
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"],
-      "usesCleartextTraffic": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -34,9 +36,18 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Used to find clinics and hospitals near you."
+          "locationWhenInUsePermission": "Used to find dementia caregivers and support groups near you."
         }
-      ]
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-font"
     ]
   }
 }

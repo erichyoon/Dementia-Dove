@@ -6,6 +6,7 @@ import { GeoPoint, NearbyClinic } from '../services/clinicSearch';
 interface Props {
   center: GeoPoint;
   clinics: NearbyClinic[];
+  title?: string;
 }
 
 function mapHtml(center: GeoPoint, clinics: NearbyClinic[]) {
@@ -80,14 +81,14 @@ function mapHtml(center: GeoPoint, clinics: NearbyClinic[]) {
 </html>`;
 }
 
-export const ClinicsMap: React.FC<Props> = ({ center, clinics }) => {
+export const ClinicsMap: React.FC<Props> = ({ center, clinics, title = 'Caregivers map' }) => {
   const html = mapHtml(center, clinics);
 
   if (Platform.OS === 'web') {
     return (
       <View style={styles.wrap}>
         {React.createElement('iframe', {
-          title: 'Clinics map',
+          title,
           srcDoc: html,
           style: {
             width: '100%',

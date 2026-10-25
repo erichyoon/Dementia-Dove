@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 enum VoiceClip {
     VOICE_SCAN = 0,
     VOICE_WELCOME,
@@ -21,3 +23,11 @@ void voice_play_welcome(void);
 void voice_play_task(int task_index);
 void voice_service(void);
 bool voice_is_playing(void);
+
+void voice_capture_reset(void);
+void voice_capture_begin(void);
+void voice_capture_service(void);
+void voice_capture_end(void);
+bool voice_capture_truncated(void);
+size_t voice_capture_pcm_bytes(void);
+const uint8_t *voice_capture_wav(size_t *nbytes);

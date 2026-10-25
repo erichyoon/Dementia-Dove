@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, SafeAreaView } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { SessionRecord, SyncState } from './src/types/session';
 import {
@@ -11,18 +12,20 @@ import { syncSessionFromDevice, startDeviceExamination } from './src/services/de
 import { refreshSessionsFromCloud } from './src/services/cloudSessions';
 
 import { BottomTabBar, TabKey } from './src/components/BottomTabBar';
-import { LabTab } from './src/components/LabTab';
-import { AnalyticsTab } from './src/components/AnalyticsTab';
+import { DashboardTab } from './src/components/DashboardTab';
+import { ScreenTab } from './src/components/ScreenTab';
+import { GroupsTab } from './src/components/GroupsTab';
 import { AccountTab } from './src/components/AccountTab';
 import { ClinicsTab } from './src/components/ClinicsTab';
-import { ChatbotTab } from './src/components/ChatbotTab';
-import { MindGamesTab } from './src/components/MindGamesTab';
+import { DEFAULT_PROFILE, getProfile, saveProfile, UserProfile } from './src/services/profileStorage';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<TabKey>('lab');
+  const [currentTab, setCurrentTab] = useState<TabKey>('dashboard');
   const [isPaired, setIsPaired] = useState<boolean>(false);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [syncState, setSyncState] = useState<SyncState>('idle');
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
 
   // Load offline sessions from storage on mount
   const refreshSessions = async () => {
@@ -34,7 +37,13 @@ export default function App() {
     refreshSessionsFromCloud()
       .then(setSessions)
       .catch(() => refreshSessions());
+    getProfile().then(setProfile);
   }, []);
+
+  const updateProfile = async (next: UserProfile) => {
+    setProfile(next);
+    await saveProfile(next);
+  };
 
   useEffect(() => {
     if (!isPaired) return;
@@ -47,7 +56,7 @@ export default function App() {
   // Only reached after LabTab validates the live optical particle code.
   const handlePairSuccess = async () => {
     const kickoff = startDeviceExamination({
-      patientName: 'Omar Firdaus',
+      patientName: profile.name,
       patientId: 'PT-8F24',
       examType: 'RECALL Speech Exam',
     });
@@ -62,10 +71,16 @@ export default function App() {
 
   const handleSyncData = async () => {
     setSyncState('syncing');
-    await syncSessionFromDevice('192.168.4.1');
+    setSyncNote(null);
+    const result = await syncSessionFromDevice('192.168.4.1');
     await refreshSessions();
-    setSyncState('success');
-    setTimeout(() => setSyncState('idle'), 2000);
+    if (result.success) {
+      setSyncState('success');
+      setTimeout(() => setSyncState('idle'), 2500);
+      return;
+    }
+    setSyncNote(result.message);
+    setSyncState('error');
   };
 
   const handleClearData = async () => {
@@ -74,38 +89,42 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaProvider>
+      <View style={styles.frame}>
+      <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
 
       {/* Main Tab Screen Content */}
       <View style={styles.content}>
-        {currentTab === 'lab' && (
-          <LabTab
+        {currentTab === 'dashboard' && (
+          <DashboardTab isPaired={isPaired} sessions={sessions} displayName={profile.name} />
+        )}
+
+        {currentTab === 'screen' && (
+          <ScreenTab
             isPaired={isPaired}
             onPairSuccess={handlePairSuccess}
             onResetPairing={handleResetPairing}
-          />
-        )}
-
-        {currentTab === 'analytics' && (
-          <AnalyticsTab
             sessions={sessions}
             syncState={syncState}
             onSync={handleSyncData}
           />
         )}
 
-        {currentTab === 'chat' && <ChatbotTab isPaired={isPaired} />}
+        {currentTab === 'groups' && <GroupsTab />}
 
-        {currentTab === 'games' && <MindGamesTab />}
-
-        {currentTab === 'clinics' && <ClinicsTab />}
+        {currentTab === 'nearby' && <ClinicsTab />}
 
         {currentTab === 'account' && (
           <AccountTab
             isPaired={isPaired}
+            profile={profile}
+            sessions={sessions}
+            onProfileChange={updateProfile}
             onClearData={handleClearData}
             onSync={handleSyncData}
+            syncState={syncState}
+            syncNote={syncNote}
             onResetPairing={handleResetPairing}
           />
         )}
@@ -116,17 +135,28 @@ export default function App() {
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
       />
-    </SafeAreaView>
+      </SafeAreaView>
+      </View>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  frame: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    backgroundColor: '#E7E0D4',
+  },
   container: {
     flex: 1,
+    width: '100%',
+    maxWidth: 440,
     backgroundColor: '#F6F0E4',
   },
   content: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: '#F6F0E4',
   },
 });

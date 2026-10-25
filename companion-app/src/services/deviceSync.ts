@@ -1,6 +1,6 @@
 import { NativeModules } from 'react-native';
 import { SessionRecord } from '../types/session';
-import { ingestDeviceSession, refreshSessionsFromCloud } from './cloudSessions';
+import { ingestDeviceSession, pullCloudSessions, refreshSessionsFromCloud } from './cloudSessions';
 
 export interface SyncResult {
   success: boolean;
@@ -39,10 +39,18 @@ export async function syncSessionFromDevice(deviceIp: string = '192.168.4.1'): P
     }
   }
 
-  await refreshSessionsFromCloud();
+  const cloud = await pullCloudSessions();
+  if (cloud) {
+    await refreshSessionsFromCloud();
+    return {
+      success: true,
+      message: 'Synced with this computer.',
+    };
+  }
+
   return {
-    success: true,
-    message: 'Loaded exam sessions from the cloud.',
+    success: false,
+    message: "Couldn't reach the device or this computer.",
   };
 }
 

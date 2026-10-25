@@ -1,34 +1,45 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
+  type ScrollViewInstance,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { FolderCard } from './FolderCard';
 import { colors, shadow } from '../theme';
 import { ChatMessage, CHAT_STARTERS, replyToPatient } from '../services/chatbot';
 
 interface Props {
   isPaired: boolean;
+  name?: string;
 }
 
 let msgSeq = 1;
 
-export const ChatbotTab: React.FC<Props> = ({ isPaired }) => {
+function greeting(name: string) {
+  return `Hi ${name}. I am your RECALL companion. Ask how to start, what each task is, or where to find a caregiver.`;
+}
+
+export const ChatbotTab: React.FC<Props> = ({ isPaired, name = 'Omar' }) => {
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'm0',
       role: 'bot',
-      text: 'Hi Omar. I am your RECALL companion. Ask how to start, what each task is, or where to find a clinic.',
+      text: greeting(name),
     },
   ]);
-  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    setMessages((prev) =>
+      prev.map((message) => (message.id === 'm0' ? { ...message, text: greeting(name) } : message))
+    );
+  }, [name]);
+  const scrollRef = useRef<ScrollViewInstance>(null);
 
   const pushExchange = (text: string) => {
     const trimmed = text.trim();
@@ -37,7 +48,7 @@ export const ChatbotTab: React.FC<Props> = ({ isPaired }) => {
     const bot: ChatMessage = {
       id: `b${msgSeq++}`,
       role: 'bot',
-      text: replyToPatient(trimmed, isPaired),
+      text: replyToPatient(trimmed, isPaired, name),
     };
     setMessages((prev) => [...prev, user, bot]);
     setDraft('');
@@ -49,50 +60,45 @@ export const ChatbotTab: React.FC<Props> = ({ isPaired }) => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.title}>Ask anything.{'\n'}Stay on track.</Text>
+      <Text style={styles.title}>Ask anything.</Text>
       <Text style={styles.subtitle}>
-        {isPaired ? 'Device paired · exam can run on hardware' : 'Unpaired · scan the code in Lab first'}
+        {isPaired ? 'Device paired · exam can run on hardware' : 'Unpaired · scan the code in Screening first'}
       </Text>
 
-      <FolderCard style={{ flex: 1, width: '100%' }}>
-        <View style={styles.threadWrap}>
-          <ScrollView
-            ref={scrollRef}
-            style={styles.thread}
-            contentContainerStyle={styles.threadContent}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-          >
-            {messages.map((msg) => (
-              <View
-                key={msg.id}
-                style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleBot]}
-              >
-                <Text style={[styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser]}>
-                  {msg.text}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      </FolderCard>
+      <View style={styles.threadCard}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.thread}
+          contentContainerStyle={styles.threadContent}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        >
+          {messages.map((msg) => (
+            <View
+              key={msg.id}
+              style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleBot]}
+            >
+              <Text style={[styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser]}>
+                {msg.text}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.starters}
-      >
+      <View style={styles.starters}>
         {CHAT_STARTERS.map((item) => (
           <TouchableOpacity
-            key={item}
+            key={item.label}
             activeOpacity={0.8}
-            onPress={() => pushExchange(item)}
+            onPress={() => pushExchange(item.text)}
             style={styles.chip}
             accessibilityRole="button"
+            accessibilityLabel={item.text}
           >
-            <Text style={styles.chipText}>{item}</Text>
+            <Text style={styles.chipText}>{item.label}</Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
 
       <View style={styles.composer}>
         <TextInput
@@ -120,27 +126,35 @@ export const ChatbotTab: React.FC<Props> = ({ isPaired }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
+    width: '100%',
     backgroundColor: colors.paper,
-    paddingTop: 18,
+    paddingTop: 8,
     paddingHorizontal: 18,
   },
   title: {
-    fontSize: 32,
+    fontSize: 26,
     fontWeight: '900',
     color: colors.ink,
-    letterSpacing: -0.7,
-    lineHeight: 36,
-    marginBottom: 6,
+    letterSpacing: -0.6,
+    lineHeight: 30,
   },
   subtitle: {
     color: colors.muted,
     fontSize: 13,
     fontWeight: '700',
-    marginBottom: 10,
+    marginBottom: 4,
   },
-  threadWrap: {
+  threadCard: {
     flex: 1,
-    minHeight: 220,
+    minHeight: 72,
+    marginTop: 6,
+    marginBottom: 6,
+    backgroundColor: colors.white,
+    borderWidth: 3,
+    borderColor: colors.ink,
+    borderRadius: 22,
+    overflow: 'hidden',
   },
   thread: {
     flex: 1,
@@ -176,17 +190,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   starters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
-    paddingVertical: 10,
+    paddingTop: 4,
+    paddingBottom: 0,
   },
   chip: {
     borderWidth: 3,
     borderColor: colors.ink,
     backgroundColor: colors.white,
-    borderRadius: 14,
+    borderRadius: 999,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    ...shadow.hard,
   },
   chipText: {
     color: colors.ink,
@@ -195,12 +211,16 @@ const styles = StyleSheet.create({
   },
   composer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
     gap: 8,
-    paddingBottom: 8,
+    paddingBottom: 0,
   },
   input: {
     flex: 1,
-    height: 48,
+    minWidth: 0,
+    width: 0,
+    height: 44,
     borderWidth: 3,
     borderColor: colors.ink,
     borderRadius: 14,
@@ -210,7 +230,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sendBtn: {
-    height: 48,
+    flexShrink: 0,
+    height: 44,
     paddingHorizontal: 16,
     borderRadius: 14,
     borderWidth: 3,
