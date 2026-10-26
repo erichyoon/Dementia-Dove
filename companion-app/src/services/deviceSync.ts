@@ -1,14 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules } from 'react-native';
 import { SessionRecord } from '../types/session';
 import { ingestDeviceSession, pullCloudSessions, refreshSessionsFromCloud } from './cloudSessions';
 import { getStoredSessions } from './sessionStorage';
 import { scoreWavBytes } from './voice/score';
-
-const DEVICE_HOST_KEY = 'dove.deviceHost';
-const AP_FALLBACK_IP = '192.168.4.1';
-let cachedDeviceHost: string | null = null;
-let lastSubnetScanMs = 0;
 
 export interface SyncResult {
   success: boolean;
@@ -160,123 +154,15 @@ async function attachVoiceScore(host: string, sessionJson: any): Promise<void> {
   }
 }
 
-export async function rememberDeviceHost(host: string): Promise<void> {
-  const clean = host.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].trim();
-  if (!clean || clean === 'localhost' || clean === '127.0.0.1') return;
-  cachedDeviceHost = clean;
-  try {
-    await AsyncStorage.setItem(DEVICE_HOST_KEY, clean);
-  } catch {
-    /* ignore */
-  }
-}
-
-export async function loadRememberedDeviceHost(): Promise<string | null> {
-  if (cachedDeviceHost) return cachedDeviceHost;
-  try {
-    cachedDeviceHost = await AsyncStorage.getItem(DEVICE_HOST_KEY);
-  } catch {
-    /* ignore */
-  }
-  return cachedDeviceHost;
-}
-
-function looksLikeDove(statusJson: any): boolean {
-  const mode = statusJson?.mode;
-  return (
-    mode === 'WHITE_START' ||
-    mode === 'EXAMINATION' ||
-    mode === 'PARTICLE_CLOUD' ||
-    (typeof statusJson?.sessionId === 'string' && statusJson.sessionId.startsWith('DOVE')) ||
-    (typeof statusJson?.id === 'string' && statusJson.id.startsWith('DOVE'))
-  );
-}
-
-function isLanIPv4(host: string): boolean {
-  const match = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!match) return false;
-  const firstOctet = Number(match[1]);
-  const secondOctet = Number(match[2]);
-  return firstOctet === 10 || firstOctet === 192 || (firstOctet === 172 && secondOctet >= 16 && secondOctet <= 31);
-}
-
-function subnetHosts(seed: string): string[] {
-  const match = seed.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!match) return [];
-  const prefix = `${match[1]}.${match[2]}.${match[3]}`;
-  const self = Number(match[4]);
-  const preferred = [100, 101, 102, 103, 110, 120, 150, 200, 10, 20, 30, 50, 80];
-  const hosts: string[] = [];
-  for (const n of preferred) {
-    if (n !== self) hosts.push(`${prefix}.${n}`);
-  }
-  for (let n = 2; n <= 254; n += 1) {
-    if (n === self || preferred.includes(n)) continue;
-    hosts.push(`${prefix}.${n}`);
-  }
-  return hosts;
-}
-
-async function probeDove(host: string, timeoutMs: number): Promise<boolean> {
-  const response = await readResponse(`http://${host}/api/examination/status`, timeoutMs);
-  if (!response?.ok) return false;
-  try {
-    return looksLikeDove(await response.json());
-  } catch {
-    return false;
-  }
-}
-
-async function scanSubnetForDevice(seeds: string[]): Promise<string | null> {
-  const now = Date.now();
-  if (now - lastSubnetScanMs < 20000) return null;
-  lastSubnetScanMs = now;
-
-  const seen = new Set<string>();
-  const candidates: string[] = [];
-  for (const seed of seeds.filter(isLanIPv4)) {
-    for (const host of subnetHosts(seed)) {
-      if (!seen.has(host)) {
-        seen.add(host);
-        candidates.push(host);
-      }
-    }
-  }
-  if (!candidates.length) return null;
-
-  const batchSize = 24;
-  for (let i = 0; i < candidates.length; i += batchSize) {
-    const batch = candidates.slice(i, i + batchSize);
-    const hits = await Promise.all(batch.map(async (host) => ((await probeDove(host, 450)) ? host : null)));
-    const found = hits.find((host): host is string => !!host);
-    if (found) {
-      await rememberDeviceHost(found);
-      return found;
-    }
-  }
-  return null;
-}
-
-function orderedDeviceHosts(preferred?: string): string[] {
-  const hosts = new Set<string>();
-  if (cachedDeviceHost) hosts.add(cachedDeviceHost);
-  if (preferred && preferred !== AP_FALLBACK_IP) hosts.add(preferred);
-  hosts.add('dove.local');
-  for (const host of collectReachableHosts()) hosts.add(host);
-  hosts.add(AP_FALLBACK_IP);
-  return Array.from(hosts);
-}
-
 export async function syncSessionFromDevice(
-  deviceIp: string = '',
+  deviceIp: string = '192.168.4.1',
   onListen?: () => void,
   forceRetry: boolean = false
 ): Promise<SyncResult> {
   if (scoring) {
     return { success: false, message: 'The phone is still listening to the recording.', listening: true };
   }
-  await loadRememberedDeviceHost();
-  const hosts = orderedDeviceHosts(deviceIp);
+  const hosts = Array.from(new Set([deviceIp, ...collectReachableHosts()]));
   for (const host of hosts) {
     const response = await readResponse(`http://${host}/api/session/latest`, 2000);
     if (!response?.ok) continue;
@@ -303,7 +189,6 @@ export async function syncSessionFromDevice(
         }
         scoring = true;
         try {
-          await rememberDeviceHost(host);
           if (sessionJson.audioStorage !== 'none') {
             onListen?.();
             await new Promise((resolve) => setTimeout(resolve, 40));
@@ -331,11 +216,6 @@ export async function syncSessionFromDevice(
     } catch {
       scoring = false;
     }
-  }
-
-  const scanned = await scanSubnetForDevice(orderedDeviceHosts(deviceIp));
-  if (scanned && !hosts.includes(scanned)) {
-    return syncSessionFromDevice(scanned, onListen, forceRetry);
   }
 
   const cloud = await pullCloudSessions();
@@ -367,8 +247,7 @@ function addHost(hosts: Set<string>, raw?: string | null) {
 }
 
 export function collectReachableHosts(): string[] {
-  const hosts = new Set<string>(['dove.local', AP_FALLBACK_IP, '127.0.0.1', 'localhost']);
-  if (cachedDeviceHost) hosts.add(cachedDeviceHost);
+  const hosts = new Set<string>(['192.168.4.1', '127.0.0.1', 'localhost']);
   try {
     if (typeof window !== 'undefined' && window.location?.hostname) {
       addHost(hosts, window.location.hostname);
@@ -411,7 +290,7 @@ async function pingStartExam(
 ): Promise<boolean> {
   const query = examQuery(payload);
   const body = JSON.stringify(payload);
-  const hosts = orderedDeviceHosts();
+  const hosts = collectReachableHosts();
 
   const confirmed: { url: string; init: RequestInit }[] = [];
   const extra: { url: string; init: RequestInit }[] = [];
@@ -433,24 +312,15 @@ async function pingStartExam(
     extra.push({ url: `http://${host}/go?${query}`, init: { method: 'GET', mode: 'no-cors' } });
   }
 
-  const rememberBoardHit = async (url: string, init: RequestInit, timeoutMs: number): Promise<boolean> => {
-    const ok = await hit(url, init, timeoutMs);
-    if (!ok || init.mode === 'no-cors') return false;
-    const host = url.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
-    void rememberDeviceHost(host);
-    return true;
-  };
-
   const relayHits = await Promise.all(confirmed.map(({ url, init }) => hit(url, init, 1800)));
-  const boardHits = await Promise.all(extra.map(({ url, init }) => rememberBoardHit(url, init, 1200)));
-  return relayHits.some(Boolean) || boardHits.some(Boolean);
+  void Promise.all(extra.map(({ url, init }) => hit(url, init, 1200)));
+  return relayHits.some(Boolean);
 }
 
 export async function startDeviceExamination(
   payload: UserExaminationPayload,
-  _deviceIp: string = ''
+  _deviceIp: string = '192.168.4.1'
 ): Promise<{ success: boolean; message: string }> {
-  await loadRememberedDeviceHost();
   for (let attempt = 0; attempt < 20; attempt++) {
     const ok = await pingStartExam(payload);
     if (ok) {
@@ -458,9 +328,6 @@ export async function startDeviceExamination(
         success: true,
         message: `Examination started on hardware for ${payload.patientName} (${payload.patientId})`,
       };
-    }
-    if (attempt === 2) {
-      await scanSubnetForDevice(orderedDeviceHosts(_deviceIp));
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }

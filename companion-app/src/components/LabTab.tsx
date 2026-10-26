@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, TextInput } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { DEVICE_OPTICAL_CODE, isValidDeviceOpticalCode, parseDeviceOpticalCode } from '../constants/opticalCode';
-import { rememberDeviceHost } from '../services/deviceSync';
+import { DEVICE_OPTICAL_CODE, isValidDeviceOpticalCode } from '../constants/opticalCode';
 import { colors, shadow } from '../theme';
 import { FolderCard } from './FolderCard';
 import { getProfile } from '../services/profileStorage';
@@ -67,11 +66,7 @@ export const LabTab: React.FC<Props> = ({
 
   const handleValidCode = (data: string) => {
     if (isRecognizing || isPaired) return;
-    const parsed = parseDeviceOpticalCode(data);
-    if (!parsed.valid) return;
-    if (parsed.ip) {
-      void rememberDeviceHost(parsed.ip);
-    }
+    if (!isValidDeviceOpticalCode(data)) return;
 
     setRejectMessage(null);
     setIsRecognizing(true);

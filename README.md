@@ -58,16 +58,13 @@ The pairing code on the QR screen is `ESP32-8F24`.
 
 The companion app extracts acoustic features in TypeScript (`companion-app/src/services/voice/`) and scores them with an RBF SVM + Platt scaling. That score is separate from the board’s protocol / task-completion percentage.
 
-## Phone and board on the same Wi-Fi
+## Phone and board Wi-Fi
 
-The board joins **`smy_guest`** in station mode and keeps `ESP32-Health-Device` as a fallback hotspot.
+The board makes its own hotspot: **`ESP32-Health-Device`** / `12345678` at `192.168.4.1`.
 
 1. Flash the latest `omar_buttons` sketch.
-2. Leave the phone on `smy_guest`. Do not switch to the board hotspot unless the LAN join fails.
-3. Wait until the start screen shows `smy_guest` and a LAN IP (for example `192.168.x.x`).
-4. Run the exam, then open the companion app. It discovers the board by remembered IP, QR payload, `dove.local`, or a short subnet scan.
-
-SSID and password are set at the top of `omar_buttons.ino` (`STA_SSID` / `STA_PASS`). Change those if the guest network changes.
+2. After the exam, join **ESP32-Health-Device** on the phone.
+3. Open the companion app. It talks to `192.168.4.1`.
 
 HTTP endpoints on port 80:
 
@@ -95,7 +92,7 @@ HTTP endpoints on port 80:
 
 If upload fails, hold **BOOT**, tap **RESET**, release **BOOT**, and upload again.
 
-Serial Monitor: **115200**. A good join looks like `[WIFI] Joined 'smy_guest' at …`.
+Serial Monitor: **115200**. A good start looks like `[WIFI] AP 'ESP32-Health-Device' ready at IP: 192.168.4.1`.
 
 ## Run the companion app
 

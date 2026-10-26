@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <ESPmDNS.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <math.h>
@@ -17,9 +16,6 @@
 
 const char *AP_SSID = "ESP32-Health-Device";
 const char *AP_PASS = "12345678";
-const char *STA_SSID = "smy_guest";
-const char *STA_PASS = "12345678";
-const char *STA_HOSTNAME = "dove";
 
 WebServer server(80);
 Preferences prefs;
@@ -37,9 +33,6 @@ static lv_obj_t *exam_screen_cont = NULL;
 static lv_obj_t *dash_help_label = NULL;
 static lv_obj_t *dash_phone_label = NULL;
 static lv_obj_t *dash_exam_label = NULL;
-static lv_obj_t *optical_qr = NULL;
-static lv_obj_t *qr_ip_label = NULL;
-static char last_qr_payload[72] = "";
 static bool dash_has_exam = false;
 static uint32_t dash_last_score = 0;
 
@@ -134,10 +127,6 @@ void exam_finish_session(void);
 void exam_refresh_ui(void);
 void exam_service(void);
 static void dashboard_refresh(void);
-static void refresh_optical_code_locked(void);
-static void wifi_service(void);
-static bool wifi_sta_up(void);
-static void device_reach_ip(char *out, size_t n);
 
 void request_exam_from_phone(void)
 {
@@ -271,77 +260,12 @@ void handle_start_examination()
     server.send(200, "application/json", resp);
 }
 
-static bool wifi_sta_up(void)
-{
-    return WiFi.status() == WL_CONNECTED;
-}
-
-static void device_reach_ip(char *out, size_t n)
-{
-    if (!out || n == 0) return;
-    String ip = wifi_sta_up() ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
-    strncpy(out, ip.c_str(), n - 1);
-    out[n - 1] = 0;
-}
-
-static void refresh_optical_code_locked(void)
-{
-    if (!optical_qr) return;
-    char ip[20];
-    device_reach_ip(ip, sizeof(ip));
-    char payload[72];
-    snprintf(payload, sizeof(payload), "%s %s", DEVICE_OPTICAL_CODE, ip);
-    if (strcmp(payload, last_qr_payload) == 0) return;
-    strncpy(last_qr_payload, payload, sizeof(last_qr_payload) - 1);
-    last_qr_payload[sizeof(last_qr_payload) - 1] = 0;
-    lv_qrcode_update(optical_qr, payload, strlen(payload));
-    if (qr_ip_label) lv_label_set_text(qr_ip_label, ip);
-    Serial.printf("[OPTICAL] QR %s\n", payload);
-}
-
-static void wifi_service(void)
-{
-    static wl_status_t last = (wl_status_t)255;
-    static bool mdns_started = false;
-    static unsigned long last_try_ms = 1;
-    wl_status_t st = WiFi.status();
-
-    if (st == WL_CONNECTED && last != WL_CONNECTED) {
-        Serial.printf("[WIFI] Joined '%s' at %s\n", STA_SSID, WiFi.localIP().toString().c_str());
-        if (mdns_started) {
-            MDNS.end();
-            mdns_started = false;
-        }
-        if (MDNS.begin(STA_HOSTNAME)) {
-            MDNS.addService("http", "tcp", 80);
-            mdns_started = true;
-            Serial.printf("[WIFI] mDNS http://%s.local\n", STA_HOSTNAME);
-        }
-        lvgl_port_lock(0);
-        refresh_optical_code_locked();
-        lvgl_port_unlock();
-    } else if (st != WL_CONNECTED && last == WL_CONNECTED) {
-        Serial.printf("[WIFI] Lost '%s' — AP '%s' still available\n", STA_SSID, AP_SSID);
-    }
-
-    if (st != WL_CONNECTED && millis() - last_try_ms > 15000) {
-        last_try_ms = millis();
-        Serial.printf("[WIFI] Retrying '%s'...\n", STA_SSID);
-        WiFi.begin(STA_SSID, STA_PASS);
-    }
-
-    last = st;
-}
-
 void setup_wifi_sync_server()
 {
-    WiFi.mode(WIFI_AP_STA);
+    WiFi.mode(WIFI_AP);
     WiFi.setSleep(false);
-    WiFi.setHostname(STA_HOSTNAME);
     WiFi.softAP(AP_SSID, AP_PASS, 1, 0, 8);
-    Serial.printf("[WIFI] AP '%s' ready at %s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
-    Serial.printf("[WIFI] Connecting to '%s'...\n", STA_SSID);
-    WiFi.begin(STA_SSID, STA_PASS);
+    Serial.printf("[WIFI] AP '%s' ready at IP: %s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
 
     server.on("/api/examination/start", HTTP_OPTIONS, []() {
         server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -365,15 +289,12 @@ void setup_wifi_sync_server()
 
     server.on("/api/examination/status", HTTP_GET, []() {
         server.sendHeader("Access-Control-Allow-Origin", "*");
-        char resp[440];
-        char ip[20];
-        device_reach_ip(ip, sizeof(ip));
+        char resp[360];
         unsigned long elapsed = (exam_session_start_ms > 0) ? ((millis() - exam_session_start_ms) / 1000) : 0;
         snprintf(resp, sizeof(resp),
-            "{\"mode\":\"%s\",\"sessionId\":\"%s\",\"patient\":\"%s\",\"task\":\"%s\",\"phase\":%d,\"elapsedSeconds\":%lu,\"completed\":%s,\"ip\":\"%s\",\"ssid\":\"%s\"}",
+            "{\"mode\":\"%s\",\"sessionId\":\"%s\",\"patient\":\"%s\",\"task\":\"%s\",\"phase\":%d,\"elapsedSeconds\":%lu,\"completed\":%s}",
             (current_mode == MODE_EXAMINATION ? "EXAMINATION" : (current_mode == MODE_PARTICLE_CLOUD ? "PARTICLE_CLOUD" : "WHITE_START")),
-            session_id, patient_name, TASK_CODES[exam_task], (int)exam_phase, elapsed, (exam_completed ? "true" : "false"),
-            ip, (wifi_sta_up() ? STA_SSID : AP_SSID));
+            session_id, patient_name, TASK_CODES[exam_task], (int)exam_phase, elapsed, (exam_completed ? "true" : "false"));
         server.send(200, "application/json", resp);
     });
 
@@ -685,23 +606,20 @@ static void dashboard_refresh(void)
 {
     if (!dash_help_label || !dash_phone_label || !dash_exam_label) return;
     lvgl_port_lock(0);
-    bool sta = wifi_sta_up();
     bool phone = WiFi.softAPgetStationNum() >= 1;
     if (dash_has_exam) {
         lv_label_set_text(dash_help_label, "You are finished.\nThe result is on the phone.\nTap Start to begin again.");
-    } else if (sta || phone) {
+    } else if (phone) {
         lv_label_set_text(dash_help_label, "Tap Start when you are ready.\nListen, speak, then tap Done.");
     } else {
-        lv_label_set_text(dash_help_label, "Joining Wi-Fi.\nKeep the phone on smy_guest.");
+        lv_label_set_text(dash_help_label, "Please wait.\nA helper connects the phone.\nThen tap Start.");
     }
-    if (sta) {
-        char line[48];
-        snprintf(line, sizeof(line), "%s  %s", STA_SSID, WiFi.localIP().toString().c_str());
-        lv_label_set_text(dash_phone_label, line);
-    } else if (phone) {
+    if (phone) {
         lv_label_set_text(dash_phone_label, "Phone connected");
     } else {
-        lv_label_set_text(dash_phone_label, "Joining smy_guest...");
+        char line[48];
+        snprintf(line, sizeof(line), "Wi-Fi: %s", AP_SSID);
+        lv_label_set_text(dash_phone_label, line);
     }
     if (!dash_has_exam) {
         lv_label_set_text(dash_exam_label, "No exam yet");
@@ -729,7 +647,6 @@ void switch_mode(HardwareMode new_mode)
         lv_obj_remove_flag(particle_screen_cont, LV_OBJ_FLAG_HIDDEN);
         if (exam_screen_cont) lv_obj_add_flag(exam_screen_cont, LV_OBJ_FLAG_HIDDEN);
         Serial.println("[UI] Mode: OPTICAL QR CODE");
-        refresh_optical_code_locked();
         lvgl_port_unlock();
         voice_play_start();
         lvgl_port_lock(0);
@@ -768,12 +685,12 @@ void init_optical_code(lv_obj_t *parent)
     lv_obj_remove_flag(plate, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(plate, LV_OBJ_FLAG_CLICKABLE);
 
-    optical_qr = lv_qrcode_create(plate);
-    lv_qrcode_set_size(optical_qr, 164);
-    lv_qrcode_set_dark_color(optical_qr, lv_color_hex(COL_INK));
-    lv_qrcode_set_light_color(optical_qr, lv_color_hex(COL_WHITE));
-    lv_result_t encoded = lv_qrcode_update(optical_qr, DEVICE_OPTICAL_CODE, strlen(DEVICE_OPTICAL_CODE));
-    lv_obj_center(optical_qr);
+    lv_obj_t *qr = lv_qrcode_create(plate);
+    lv_qrcode_set_size(qr, 164);
+    lv_qrcode_set_dark_color(qr, lv_color_hex(COL_INK));
+    lv_qrcode_set_light_color(qr, lv_color_hex(COL_WHITE));
+    lv_result_t encoded = lv_qrcode_update(qr, DEVICE_OPTICAL_CODE, strlen(DEVICE_OPTICAL_CODE));
+    lv_obj_center(qr);
     Serial.printf("[OPTICAL] QR %s encode=%s\n", DEVICE_OPTICAL_CODE, encoded == LV_RESULT_OK ? "ok" : "fail");
 }
 
@@ -814,7 +731,7 @@ void create_bw_ui(void)
     lv_obj_set_style_text_align(dash_help_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(dash_help_label, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(dash_help_label, lv_color_hex(COL_INK), 0);
-    lv_label_set_text(dash_help_label, "Joining Wi-Fi.\nKeep the phone on smy_guest.");
+    lv_label_set_text(dash_help_label, "Please wait.\nA helper connects the phone.\nThen tap Start.");
     lv_obj_align(dash_help_label, LV_ALIGN_TOP_MID, 0, 100);
 
     dash_phone_label = lv_label_create(start_screen_cont);
@@ -823,7 +740,7 @@ void create_bw_ui(void)
     lv_obj_set_style_text_align(dash_phone_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(dash_phone_label, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(dash_phone_label, lv_color_hex(COL_MUTED), 0);
-    lv_label_set_text(dash_phone_label, "Joining smy_guest...");
+    lv_label_set_text(dash_phone_label, "Wi-Fi: ESP32-Health-Device");
     lv_obj_align(dash_phone_label, LV_ALIGN_TOP_MID, 0, 162);
 
     dash_exam_label = lv_label_create(start_screen_cont);
@@ -886,12 +803,6 @@ void create_bw_ui(void)
     lv_obj_set_style_text_font(qr_wait, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(qr_wait, lv_color_hex(COL_MUTED), 0);
     lv_obj_align(qr_wait, LV_ALIGN_TOP_MID, 0, 50);
-
-    qr_ip_label = lv_label_create(particle_screen_cont);
-    lv_label_set_text(qr_ip_label, "joining smy_guest");
-    lv_obj_set_style_text_font(qr_ip_label, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(qr_ip_label, lv_color_hex(COL_MUTED), 0);
-    lv_obj_align(qr_ip_label, LV_ALIGN_TOP_MID, 0, 68);
 
     exam_screen_cont = lv_obj_create(scr);
     lv_obj_set_size(exam_screen_cont, 360, 360);
@@ -1015,7 +926,6 @@ void setup()
 void loop()
 {
     poll_serial_commands();
-    wifi_service();
     server.handleClient();
 
     if (qr_mode_requested) {

@@ -12,7 +12,6 @@ import {
   syncSessionFromDevice,
   startDeviceExamination,
   clearAudioAttemptHistory,
-  loadRememberedDeviceHost,
 } from './src/services/deviceSync';
 import { refreshSessionsFromCloud } from './src/services/cloudSessions';
 
@@ -45,7 +44,6 @@ export default function App() {
       .then(setSessions)
       .catch(() => refreshSessions());
     getProfile().then(setProfile);
-    void loadRememberedDeviceHost();
   }, []);
 
   const updateProfile = async (next: UserProfile) => {
@@ -54,7 +52,7 @@ export default function App() {
   };
 
   const pullExam = async (forceRetry: boolean = false) => {
-    const syncResult = await syncSessionFromDevice('', () => setListening(true), forceRetry);
+    const syncResult = await syncSessionFromDevice('192.168.4.1', () => setListening(true), forceRetry);
     if (!syncResult.listening) {
       setListening(false);
     }
