@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { PatientSummaryStats } from '../types/session';
 import { Ionicons } from '@expo/vector-icons';
+import { PatientSummaryStats } from '../types/session';
 
 interface Props {
   stats: PatientSummaryStats;
@@ -13,7 +13,6 @@ export const AnalyticsOverview: React.FC<Props> = ({ stats }) => {
       <Text style={styles.sectionHeader}>Your Progress Summary</Text>
 
       <View style={styles.grid}>
-        {/* Total Sessions Card */}
         <View style={styles.statBox}>
           <View style={styles.iconCircleBlue}>
             <Ionicons name="fitness-outline" size={18} color="#0284c7" />
@@ -22,7 +21,6 @@ export const AnalyticsOverview: React.FC<Props> = ({ stats }) => {
           <Text style={styles.statLabel}>Completed Sessions</Text>
         </View>
 
-        {/* Average Compliance Score */}
         <View style={styles.statBox}>
           <View style={styles.iconCircleGreen}>
             <Ionicons name="ribbon-outline" size={18} color="#059669" />
@@ -31,7 +29,6 @@ export const AnalyticsOverview: React.FC<Props> = ({ stats }) => {
           <Text style={styles.statLabel}>Avg. Adherence</Text>
         </View>
 
-        {/* Total Time Logged */}
         <View style={styles.statBox}>
           <View style={styles.iconCirclePurple}>
             <Ionicons name="hourglass-outline" size={18} color="#7c3aed" />
@@ -40,7 +37,6 @@ export const AnalyticsOverview: React.FC<Props> = ({ stats }) => {
           <Text style={styles.statLabel}>Total Time</Text>
         </View>
 
-        {/* Completion Rate / Status */}
         <View style={styles.statBox}>
           <View style={styles.iconCircleAmber}>
             <Ionicons name="sparkles-outline" size={18} color="#d97706" />

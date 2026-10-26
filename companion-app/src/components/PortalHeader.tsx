@@ -30,7 +30,6 @@ export const PortalHeader: React.FC<Props> = ({ syncState, lastSyncTime, onSync 
           <Text style={styles.deviceSubtitle}>ESP32-S3 Health Monitor</Text>
         </View>
 
-        {/* Sync Button */}
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => onSync(deviceIp)}
@@ -48,7 +47,6 @@ export const PortalHeader: React.FC<Props> = ({ syncState, lastSyncTime, onSync 
         </TouchableOpacity>
       </View>
 
-      {/* Connection & Status Banner */}
       <View style={styles.statusRow}>
         <View style={styles.offlinePill}>
           <Ionicons name="checkmark-circle" size={14} color="#10b981" />
@@ -61,7 +59,6 @@ export const PortalHeader: React.FC<Props> = ({ syncState, lastSyncTime, onSync 
         </TouchableOpacity>
       </View>
 
-      {/* IP Configuration Modal */}
       <Modal visible={showConfig} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>

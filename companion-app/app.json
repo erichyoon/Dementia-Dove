@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "companion-app",
+    "name": "Dementia Dove",
     "slug": "companion-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,7 +21,7 @@
         "ACCESS_FINE_LOCATION"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#7A6B8A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

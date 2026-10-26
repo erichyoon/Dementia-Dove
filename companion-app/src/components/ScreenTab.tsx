@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LabTab } from './LabTab';
 import { AnalyticsTab } from './AnalyticsTab';
 import { SessionRecord, SyncState } from '../types/session';
+import { DEFAULT_PROFILE, UserProfile } from '../services/profileStorage';
 import { colors, shadow } from '../theme';
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
   sessions: SessionRecord[];
   syncState: SyncState;
   onSync: () => void;
+  profile?: UserProfile;
+  onOpenSettings?: () => void;
 }
 
 export const ScreenTab: React.FC<Props> = ({
@@ -21,6 +24,8 @@ export const ScreenTab: React.FC<Props> = ({
   sessions,
   syncState,
   onSync,
+  profile = DEFAULT_PROFILE,
+  onOpenSettings,
 }) => {
   const [mode, setMode] = useState<'screening' | 'analytics'>('screening');
 
@@ -52,9 +57,11 @@ export const ScreenTab: React.FC<Props> = ({
             isPaired={isPaired}
             onPairSuccess={onPairSuccess}
             onResetPairing={onResetPairing}
+            onOpenSettings={onOpenSettings}
+            onOpenProgress={() => setMode('analytics')}
           />
         ) : (
-          <AnalyticsTab sessions={sessions} syncState={syncState} onSync={onSync} />
+          <AnalyticsTab sessions={sessions} syncState={syncState} onSync={onSync} profile={profile} />
         )}
       </View>
     </View>

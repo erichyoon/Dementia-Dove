@@ -1,20 +1,25 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { SessionRecord } from '../types/session';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, shadow } from '../theme';
 import { sessionDateLabel } from '../services/days';
+import { buildSessionReport, sendReportToDoctor } from '../services/doctorReport';
+import { DEFAULT_PROFILE, UserProfile } from '../services/profileStorage';
+import { colors, shadow } from '../theme';
+import { SessionRecord, voiceResultLabel, voiceResultPercent } from '../types/session';
 
 interface Props {
   session: SessionRecord;
+  profile?: UserProfile;
+  onRetrySync?: () => void;
 }
 
 function voiceLine(session: SessionRecord): string | null {
   if (session.voicePrediction && session.voiceConfidence) {
+    const picked = voiceResultPercent(session.voicePrediction, session.voiceConfidence);
     const mark = session.voiceStatus === 'truncated' ? ' · clip cut at 150s' : '';
-    return `${session.voicePrediction} · ${session.voiceConfidence.alzheimer}% Alzheimer${mark}`;
+    return `${picked}% confidence${mark}`;
   }
-  if (session.voiceStatus === 'unscored') return 'Voice recorded · model not running';
+  if (session.voiceStatus === 'unscored') return 'Recording did not reach the phone';
   return null;
 }
 
@@ -29,13 +34,22 @@ function voiceDetail(session: SessionRecord): string {
   ].join('\n');
 }
 
-export const SessionCard: React.FC<Props> = ({ session }) => {
+export const SessionCard: React.FC<Props> = ({
+  session,
+  profile = DEFAULT_PROFILE,
+  onRetrySync,
+}) => {
   const [expanded, setExpanded] = useState(false);
   const durationMin = Math.round(session.durationSeconds / 60);
+  const doctorTarget = profile.doctorName.trim() || profile.doctorEmail.trim();
+
+  const handleEmailSession = () => {
+    const report = buildSessionReport(session, profile);
+    void sendReportToDoctor(report, profile);
+  };
 
   return (
     <View style={styles.card}>
-      {/* Clickable Card Header */}
       <TouchableOpacity
         activeOpacity={0.7}
         onPress={() => setExpanded(!expanded)}
@@ -46,6 +60,9 @@ export const SessionCard: React.FC<Props> = ({ session }) => {
             <Ionicons name="radio-button-on" size={16} color={colors.white} />
           </View>
           <View>
+            {session.voicePrediction ? (
+              <Text style={styles.voiceHeadline}>{voiceResultLabel(session.voicePrediction)}</Text>
+            ) : null}
             <Text style={styles.sessionDate}>
               {sessionDateLabel(session)} • {session.timeStr}
             </Text>
@@ -66,10 +83,8 @@ export const SessionCard: React.FC<Props> = ({ session }) => {
         </View>
       </TouchableOpacity>
 
-      {/* Expanded Analytics Details */}
       {expanded && (
         <View style={styles.detailsContent}>
-          {/* Patient-Friendly Feedback Note */}
           <View style={styles.feedbackBox}>
             <Text style={styles.feedbackLabel}>DOCTOR / SYSTEM NOTE:</Text>
             <Text style={styles.feedbackText}>{session.patientFeedback}</Text>
@@ -79,31 +94,38 @@ export const SessionCard: React.FC<Props> = ({ session }) => {
             <View style={styles.feedbackBox}>
               <Text style={styles.feedbackLabel}>VOICE MODEL</Text>
               <Text style={styles.feedbackText}>{voiceDetail(session)}</Text>
+              {session.voiceStatus === 'unscored' && onRetrySync ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry audio sync from board"
+                  activeOpacity={0.85}
+                  style={styles.retryBtn}
+                  onPress={onRetrySync}
+                >
+                  <Ionicons name="refresh-outline" size={14} color={colors.ink} />
+                  <Text style={styles.retryBtnText}>Retry audio sync from board</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : null}
 
-          {/* 3 Metric Pills */}
           <View style={styles.metricsRow}>
-            {/* Physical Button Presses */}
             <View style={styles.metricPill}>
               <Text style={styles.metricPillVal}>{session.buttonPresses}</Text>
               <Text style={styles.metricPillLabel}>TOP BUTTON</Text>
             </View>
 
-            {/* Touch Screen Interactions */}
             <View style={styles.metricPill}>
               <Text style={styles.metricPillVal}>{session.touchInteractions}</Text>
               <Text style={styles.metricPillLabel}>TOUCHES</Text>
             </View>
 
-            {/* Reaction Time */}
             <View style={styles.metricPill}>
               <Text style={styles.metricPillVal}>{session.avgReactionTimeMs} ms</Text>
               <Text style={styles.metricPillLabel}>REACTION</Text>
             </View>
           </View>
 
-          {/* Activity Timeline Bar */}
           {session.timeline && session.timeline.length > 0 && (
             <View style={styles.timelineSection}>
               <Text style={styles.timelineTitle}>ACTIVITY TIMELINE</Text>
@@ -122,6 +144,19 @@ export const SessionCard: React.FC<Props> = ({ session }) => {
               </View>
             </View>
           )}
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Email this screening to health professional"
+            activeOpacity={0.85}
+            style={styles.emailBtn}
+            onPress={handleEmailSession}
+          >
+            <Ionicons name="mail-outline" size={16} color={colors.white} />
+            <Text style={styles.emailBtnText}>
+              {doctorTarget ? `Email to ${doctorTarget}` : 'Email to health professional'}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -162,6 +197,12 @@ const styles = StyleSheet.create({
   sessionDate: {
     fontSize: 14,
     fontWeight: '800',
+    color: colors.ink,
+  },
+  voiceHeadline: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '900',
     color: colors.ink,
   },
   sessionDuration: {
@@ -280,5 +321,41 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: colors.muted,
     marginTop: 4,
+  },
+  emailBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.accent,
+    borderWidth: 3,
+    borderColor: colors.ink,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  emailBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.white,
+  },
+  retryBtn: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.ink,
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  retryBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.ink,
   },
 });

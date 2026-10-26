@@ -12,6 +12,12 @@ import {
   initials,
   shiftGoalTime,
 } from '../services/profileStorage';
+import {
+  buildSessionReport,
+  buildWeeklyReport,
+  computeWeeklyDigest,
+  sendReportToDoctor,
+} from '../services/doctorReport';
 
 interface Props {
   isPaired: boolean;
@@ -25,11 +31,20 @@ interface Props {
   onResetPairing: () => void;
 }
 
-type Pane = 'root' | 'name' | 'details' | 'preferences' | 'goal' | 'history' | 'reminders' | 'device';
+type Pane =
+  | 'root'
+  | 'name'
+  | 'details'
+  | 'doctor'
+  | 'preferences'
+  | 'goal'
+  | 'history'
+  | 'reminders'
+  | 'device';
 
 const GOAL_CHOICES = [1, 3, 5, 7];
 
-type DetailField = 'phone' | 'birthday' | 'emergencyName';
+type DetailField = 'phone' | 'birthday' | 'emergencyName' | 'doctorName' | 'doctorEmail' | 'doctorClinic';
 
 function screeningsThisWeek(sessions: SessionRecord[]): number {
   const start = startOfWeekMonday(new Date()).getTime();
@@ -58,6 +73,9 @@ export const AccountTab: React.FC<Props> = ({
   const [phone, setPhone] = useState(profile.phone);
   const [birthday, setBirthday] = useState(profile.birthday);
   const [emergencyName, setEmergencyName] = useState(profile.emergencyName);
+  const [doctorName, setDoctorName] = useState(profile.doctorName);
+  const [doctorEmail, setDoctorEmail] = useState(profile.doctorEmail);
+  const [doctorClinic, setDoctorClinic] = useState(profile.doctorClinic);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,7 +83,18 @@ export const AccountTab: React.FC<Props> = ({
     setPhone(profile.phone);
     setBirthday(profile.birthday);
     setEmergencyName(profile.emergencyName);
-  }, [profile.name, profile.phone, profile.birthday, profile.emergencyName]);
+    setDoctorName(profile.doctorName);
+    setDoctorEmail(profile.doctorEmail);
+    setDoctorClinic(profile.doctorClinic);
+  }, [
+    profile.name,
+    profile.phone,
+    profile.birthday,
+    profile.emergencyName,
+    profile.doctorName,
+    profile.doctorEmail,
+    profile.doctorClinic,
+  ]);
 
   useEffect(() => {
     if (syncState === 'success') {
@@ -113,8 +142,39 @@ export const AccountTab: React.FC<Props> = ({
       phone: phone.trim(),
       birthday: birthday.trim(),
       emergencyName: emergencyName.trim(),
+      doctorName: doctorName.trim(),
+      doctorEmail: doctorEmail.trim(),
+      doctorClinic: doctorClinic.trim(),
     });
     setEditing(null);
+  };
+
+  const currentDoctorProfile = (): UserProfile => ({
+    ...profile,
+    doctorName: doctorName.trim(),
+    doctorEmail: doctorEmail.trim(),
+    doctorClinic: doctorClinic.trim(),
+  });
+
+  const handleSendWeeklyFromProfile = () => {
+    const nextProfile = currentDoctorProfile();
+    onProfileChange(nextProfile);
+    setEditing(null);
+    const report = buildWeeklyReport(sessions, nextProfile);
+    void sendReportToDoctor(report, nextProfile);
+  };
+
+  const handleSendLatestFromProfile = () => {
+    const latest = history[0];
+    if (!latest) {
+      Alert.alert('No screenings yet', 'Complete a screening first to email an individual report.');
+      return;
+    }
+    const nextProfile = currentDoctorProfile();
+    onProfileChange(nextProfile);
+    setEditing(null);
+    const report = buildSessionReport(latest, nextProfile);
+    void sendReportToDoctor(report, nextProfile);
   };
 
   const toggleDay = (day: string) => {
@@ -221,6 +281,78 @@ export const AccountTab: React.FC<Props> = ({
                   onEdit={() => setEditing('emergencyName')}
                   onSave={saveField}
                 />
+              </View>
+            </>
+          ) : null}
+
+          {pane === 'doctor' ? (
+            <>
+              <View style={styles.card}>
+                <FieldRow
+                  label="Doctor name"
+                  value={doctorName}
+                  placeholder="Dr. Sarah Chen"
+                  editing={editing === 'doctorName'}
+                  onChangeText={setDoctorName}
+                  onEdit={() => setEditing('doctorName')}
+                  onSave={saveField}
+                />
+                <View style={styles.dividerFlush} />
+                <FieldRow
+                  label="Doctor email"
+                  value={doctorEmail}
+                  placeholder="doctor@clinic.org"
+                  editing={editing === 'doctorEmail'}
+                  keyboardType="email-address"
+                  onChangeText={setDoctorEmail}
+                  onEdit={() => setEditing('doctorEmail')}
+                  onSave={saveField}
+                />
+                <View style={styles.dividerFlush} />
+                <FieldRow
+                  label="Clinic / practice"
+                  value={doctorClinic}
+                  placeholder="Memory Care Clinic"
+                  editing={editing === 'doctorClinic'}
+                  onChangeText={setDoctorClinic}
+                  onEdit={() => setEditing('doctorClinic')}
+                  onSave={saveField}
+                />
+              </View>
+
+              <View style={[styles.card, styles.cardGap]}>
+                <View style={styles.form}>
+                  <Text style={styles.fieldLabel}>Send screening reports</Text>
+                  <Text style={styles.hint}>
+                    {computeWeeklyDigest(sessions).windowLabel}: {computeWeeklyDigest(sessions).count}{' '}
+                    screening{computeWeeklyDigest(sessions).count === 1 ? '' : 's'} ·{' '}
+                    {computeWeeklyDigest(sessions).avgScore}% average task score.
+                  </Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Email weekly screening summary"
+                    style={styles.doctorActionBtn}
+                    onPress={handleSendWeeklyFromProfile}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="mail-outline" size={16} color={colors.white} />
+                    <Text style={styles.doctorActionText}>Email weekly average</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Email latest individual screening"
+                    style={styles.doctorActionBtnGhost}
+                    onPress={handleSendLatestFromProfile}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="document-text-outline" size={16} color={colors.ink} />
+                    <Text style={styles.doctorActionGhostText}>
+                      {history[0]
+                        ? `Email latest screening (${sessionDateLabel(history[0])})`
+                        : 'Email latest screening'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </>
           ) : null}
@@ -409,6 +541,13 @@ export const AccountTab: React.FC<Props> = ({
           />
           <View style={styles.divider} />
           <Row
+            icon="medkit-outline"
+            label="Health professional"
+            value={profile.doctorName || profile.doctorEmail || 'Add'}
+            onPress={() => setPane('doctor')}
+          />
+          <View style={styles.divider} />
+          <Row
             icon="options-outline"
             label="Preferences"
             value={goalTimeLabel}
@@ -470,6 +609,8 @@ function detailTitle(pane: Pane): string {
       return 'Your name';
     case 'details':
       return 'Personal details';
+    case 'doctor':
+      return 'Health professional';
     case 'preferences':
       return 'Preferences';
     case 'goal':
@@ -499,7 +640,7 @@ function FieldRow({
   value: string;
   placeholder: string;
   editing: boolean;
-  keyboardType?: 'default' | 'phone-pad';
+  keyboardType?: 'default' | 'phone-pad' | 'email-address';
   onChangeText: (text: string) => void;
   onEdit: () => void;
   onSave: () => void;
@@ -919,5 +1060,41 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.ink,
     textAlign: 'right',
+  },
+  doctorActionBtn: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.accent,
+    borderWidth: 3,
+    borderColor: colors.ink,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  doctorActionText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.white,
+  },
+  doctorActionBtnGhost: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.paper,
+    borderWidth: 3,
+    borderColor: colors.ink,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  doctorActionGhostText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.ink,
   },
 });

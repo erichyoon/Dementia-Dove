@@ -21,7 +21,7 @@ interface Props {
 let msgSeq = 1;
 
 function greeting(name: string) {
-  return `Hi ${name}. I am your RECALL companion. Ask how to start, what each task is, or where to find a caregiver.`;
+  return `Hi ${name}. I am your Dementia Dove companion. Ask how to start, what each task is, or where to find a caregiver.`;
 }
 
 export const ChatbotTab: React.FC<Props> = ({ isPaired, name = 'Omar' }) => {

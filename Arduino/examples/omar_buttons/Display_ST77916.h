@@ -42,6 +42,5 @@ void ST77916_Init();
 void LCD_Init();
 void LCD_addWindow(uint16_t Xstart, uint16_t Ystart, uint16_t Xend, uint16_t Yend,uint16_t* color);
 
-// backlight
 void Backlight_Init();
 void Set_Backlight(uint8_t Light);  

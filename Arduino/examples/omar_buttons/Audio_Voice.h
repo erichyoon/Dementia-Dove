@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
 enum VoiceClip {
     VOICE_SCAN = 0,

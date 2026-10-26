@@ -22,8 +22,6 @@ enum GESTURE {
   LONG_PRESS = 0x0C
 
 };
-//debug info
-/****************HYN_REG_MUT_DEBUG_INFO_MODE address start***********/
 #define CST816_REG_GestureID      0x01
 #define CST816_REG_Version        0x15
 #define CST816_REG_ChipID         0xA7

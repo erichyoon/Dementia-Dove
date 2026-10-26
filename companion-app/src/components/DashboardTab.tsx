@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, type ScrollViewInstance } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, type ScrollViewInstance } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SessionRecord } from '../types/session';
+import { SessionRecord, voiceResultLabel, voiceResultPercent } from '../types/session';
 import { ClinicAppointment, getAppointments } from '../services/appointmentStorage';
 import { addDays, dayKey, inWindow, sameDay, startOfDay, startOfWeekMonday } from '../services/days';
 import { ChatbotTab } from './ChatbotTab';
@@ -49,13 +49,13 @@ function weeksInWindow(today: Date): Date[] {
 
 function dashboardVoice(session: SessionRecord): string {
   const features = session.voiceFeatures;
-  if (session.voiceStatus === 'unscored') return 'Voice recorded. The model was not running.';
+  if (session.voiceStatus === 'unscored') return 'The recording did not reach the phone, so it was not scored.';
   if (!session.voicePrediction || !session.voiceConfidence) return 'Voice score pending';
   const cut = session.voiceStatus === 'truncated' ? ' Clip cut at 150 seconds.' : '';
   const featureLine = features
     ? `\n${features.duration}s · ${features.pause_count} pauses · speech ${features.speech_rate}/s · pitch ${features.pitch_mean} Hz · ${features.silence_ratio}% silence`
     : '';
-  return `${session.voicePrediction} · healthy ${session.voiceConfidence.healthy}% · Alzheimer ${session.voiceConfidence.alzheimer}%.${cut}${featureLine}`;
+  return `${voiceResultLabel(session.voicePrediction)} · healthy ${session.voiceConfidence.healthy}% · at risk ${session.voiceConfidence.alzheimer}%.${cut}${featureLine}`;
 }
 
 export const DashboardTab: React.FC<Props> = ({ isPaired, sessions, displayName }) => {
@@ -118,11 +118,28 @@ export const DashboardTab: React.FC<Props> = ({ isPaired, sessions, displayName 
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topRow}>
-          <View style={styles.topCopy}>
-            <Text style={styles.title}>Hello, {firstName(displayName)}.</Text>
-            <Text style={styles.subtitle}>
-              {isPaired ? 'Device paired' : 'Device unpaired'}
-            </Text>
+          <View style={styles.brandRow}>
+            <View style={styles.brandLogoBox}>
+              <Image
+                source={require('../../assets/dove-logo.png')}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityLabel="Dementia Dove logo"
+              />
+            </View>
+            <View style={styles.topCopy}>
+              <Text
+                style={styles.title}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
+                Hello, {firstName(displayName)}.
+              </Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {isPaired ? 'Device paired' : 'Device unpaired'}
+              </Text>
+            </View>
           </View>
           <View style={styles.streakPill} accessibilityLabel={`${streak} day voice streak`}>
             <Ionicons name="mic" size={14} color={colors.white} />
@@ -184,11 +201,23 @@ export const DashboardTab: React.FC<Props> = ({ isPaired, sessions, displayName 
 
         <View style={styles.hero}>
           <View style={styles.heroCopy}>
-            {session ? <Text style={styles.heroScore}>{session.score}</Text> : null}
+            {session?.voicePrediction ? (
+              <Text style={styles.heroWord}>{voiceResultLabel(session.voicePrediction)}</Text>
+            ) : session ? (
+              <Text style={styles.heroScore}>{session.score}</Text>
+            ) : null}
             <Text style={[styles.heroLabel, !session && styles.heroEmpty]}>
-              {session ? 'Screening score' : 'No screening this day'}
+              {session?.voicePrediction && session.voiceConfidence
+                ? `${voiceResultPercent(session.voicePrediction, session.voiceConfidence)}% confidence`
+                : session
+                  ? 'Screening score'
+                  : 'No screening this day'}
             </Text>
-            {session ? <Text style={styles.heroMeta}>{session.timeStr}</Text> : null}
+            {session?.voicePrediction ? (
+              <Text style={styles.heroMeta}>Tasks finished {session.score}</Text>
+            ) : session ? (
+              <Text style={styles.heroMeta}>{session.timeStr}</Text>
+            ) : null}
           </View>
           <View style={styles.ring}>
             <Ionicons name={session?.voiceStatus ? 'mic' : 'mic-outline'} size={22} color={colors.white} />
@@ -201,7 +230,9 @@ export const DashboardTab: React.FC<Props> = ({ isPaired, sessions, displayName 
             <Text style={styles.statLabel}>On the exam</Text>
           </View>
           <View style={styles.statTile}>
-            <Text style={styles.statValue}>{session?.voicePrediction || '—'}</Text>
+            <Text style={[styles.statValue, session?.voicePrediction ? styles.statValueLong : null]}>
+              {session?.voicePrediction ? voiceResultLabel(session.voicePrediction) : '—'}
+            </Text>
             <Text style={styles.statLabel}>Voice</Text>
           </View>
           <View style={styles.statTile}>
@@ -294,17 +325,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
     marginBottom: 18,
+  },
+  brandRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  brandLogoBox: {
+    width: 68,
+    height: 68,
+    flexShrink: 0,
+    borderRadius: 18,
+    borderWidth: 3,
+    borderColor: colors.ink,
+    backgroundColor: '#766087',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.hard,
+  },
+  brandLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 13,
   },
   topCopy: {
     flex: 1,
-    paddingRight: 12,
+    minWidth: 0,
   },
   title: {
-    fontSize: 32,
+    fontSize: 26,
+    lineHeight: 30,
     fontWeight: '900',
     color: colors.ink,
-    letterSpacing: -0.7,
+    letterSpacing: -0.6,
   },
   subtitle: {
     marginTop: 2,
@@ -397,6 +455,12 @@ const styles = StyleSheet.create({
   heroCopy: {
     flex: 1,
   },
+  heroWord: {
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '900',
+    color: colors.ink,
+  },
   heroScore: {
     fontSize: 56,
     lineHeight: 60,
@@ -446,6 +510,10 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     color: colors.ink,
+  },
+  statValueLong: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   statLabel: {
     marginTop: 4,

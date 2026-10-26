@@ -198,7 +198,7 @@ def extract_features_from_audio(audio_path):
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({
-        'message': 'Project RECALL API',
+        'message': 'Dementia Dove API',
         'status': 'running',
         'endpoints': {
             'health': '/api/health',

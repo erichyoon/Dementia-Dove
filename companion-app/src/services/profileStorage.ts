@@ -9,6 +9,9 @@ export interface UserProfile {
   phone: string;
   birthday: string;
   emergencyName: string;
+  doctorName: string;
+  doctorEmail: string;
+  doctorClinic: string;
   weeklyGoal: number;
   goalTime: string;
   reminderDays: string[];
@@ -21,6 +24,9 @@ export const DEFAULT_PROFILE: UserProfile = {
   phone: '',
   birthday: '',
   emergencyName: '',
+  doctorName: '',
+  doctorEmail: '',
+  doctorClinic: '',
   weeklyGoal: 3,
   goalTime: '08:00',
   reminderDays: ['Mon', 'Wed', 'Fri'],

@@ -112,7 +112,7 @@ class HardwareBridgeService {
       this.socket.send(JSON.stringify(cmd));
     }
 
-    // Process locally for immediate responsive UI feedback
+    // Mirror the command locally so the replica updates even when the WebSocket is only simulated.
     if (cmd.type === 'TRIGGER_START') {
       const nextStarted = !this.currentState.isStarted;
       this.updateState({
@@ -146,7 +146,6 @@ class HardwareBridgeService {
   }
 
   private startSimulationTelemetry(): void {
-    // Generate gentle realistic telemetry fluctuations for testing
     setInterval(() => {
       if (this.isConnected) {
         this.updateTelemetry({

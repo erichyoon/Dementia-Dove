@@ -382,11 +382,14 @@ esp_err_t es8311_init(es8311_handle_t dev, const es8311_clock_config_t *const cl
     /* Setup audio format (fmt): master/slave, resolution, I2S */
     ESP_RETURN_ON_ERROR(es8311_fmt_config(dev, res_in, res_out), TAG, "");
 
+    // Reg 0x1C bit 6 bypasses the ADC equalizer. Bit 5 is the ADC high-pass.
+    // Clear it before the modulator starts so the filter stays off and the
+    // frozen offset is zero. 0x6A had that bit set (dynamic high-pass on).
+    ESP_RETURN_ON_ERROR(es8311_write_reg(dev, ES8311_ADC_REG1C, 0x4A), TAG, "I2C read/write error");
     ESP_RETURN_ON_ERROR(es8311_write_reg(dev, ES8311_SYSTEM_REG0D, 0x01), TAG, "I2C read/write error"); // Power up analog circuitry - NOT default
     ESP_RETURN_ON_ERROR(es8311_write_reg(dev, ES8311_SYSTEM_REG0E, 0x02), TAG, "I2C read/write error"); // Enable analog PGA, enable ADC modulator - NOT default
     ESP_RETURN_ON_ERROR(es8311_write_reg(dev, ES8311_SYSTEM_REG12, 0x00), TAG, "I2C read/write error"); // power-up DAC - NOT default
     ESP_RETURN_ON_ERROR(es8311_write_reg(dev, ES8311_SYSTEM_REG13, 0x10), TAG, "I2C read/write error"); // Enable output to HP drive - NOT default
-    ESP_RETURN_ON_ERROR(es8311_write_reg(dev, ES8311_ADC_REG1C, 0x6A), TAG, "I2C read/write error"); // ADC Equalizer bypass, cancel DC offset in digital domain
     ESP_RETURN_ON_ERROR(es8311_write_reg(dev, ES8311_DAC_REG37, 0x08), TAG, "I2C read/write error"); // Bypass DAC equalizer - NOT default
 
     return ESP_OK;
@@ -444,6 +447,18 @@ esp_err_t es8311_voice_mute(es8311_handle_t dev, bool mute)
     }
 
     return es8311_write_reg(dev, ES8311_DAC_REG31, reg31);
+}
+
+esp_err_t es8311_dac_standby(es8311_handle_t dev, bool standby)
+{
+    if (standby) {
+        es8311_voice_mute(dev, true);
+        es8311_voice_volume_set(dev, 0, NULL);
+        es8311_write_reg(dev, ES8311_SYSTEM_REG13, 0x00);
+        return es8311_write_reg(dev, ES8311_SYSTEM_REG12, 0x02);
+    }
+    es8311_write_reg(dev, ES8311_SYSTEM_REG12, 0x00);
+    return es8311_write_reg(dev, ES8311_SYSTEM_REG13, 0x10);
 }
 
 esp_err_t es8311_microphone_gain_set(es8311_handle_t dev, es8311_mic_gain_t gain_db)

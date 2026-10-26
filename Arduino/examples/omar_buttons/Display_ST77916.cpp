@@ -300,7 +300,6 @@ int QSPI_Init(void){
   } else {
     printf("Failed to read register 0x04, error code: %d\n", ret);
   } 
-  // panel_io_spi_del(io_handle);
   io_config.pclk_hz = ESP_PANEL_LCD_SPI_CLK_HZ;
   if(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)ESP_PANEL_HOST_SPI_ID_DEFAULT, &io_config, &io_handle) != ESP_OK){
     printf("Failed to set LCD communication parameters -- SPI\r\n");
@@ -308,13 +307,10 @@ int QSPI_Init(void){
   }
   printf("LCD communication parameters are set successfully -- SPI\r\n");
   
-  // Check register values and configure accordingly
   if (register_data[0] == 0x00 && register_data[1] == 0x7F && register_data[2] == 0x7F && register_data[3] == 0x7F) {
-    // Handle the case where the register data matches this pattern
     printf("Vendor-specific initialization for case 1.\n");
   }
   else if (register_data[0] == 0x00 && register_data[1] == 0x02 && register_data[2] == 0x7F && register_data[3] == 0x7F) {
-    // Provide vendor-specific initialization commands if register data matches this pattern
     vendor_config.init_cmds = vendor_specific_init_new;
     vendor_config.init_cmds_size = sizeof(vendor_specific_init_new) / sizeof(st77916_lcd_init_cmd_t);
     printf("Vendor-specific initialization for case 2.\n");
@@ -335,7 +331,6 @@ int QSPI_Init(void){
 
   esp_lcd_panel_reset(panel_handle);
   esp_lcd_panel_init(panel_handle);
-  // esp_lcd_panel_invert_color(panel_handle,false);
 
   esp_lcd_panel_disp_on_off(panel_handle, true);
   test_draw_bitmap(panel_handle);
@@ -356,23 +351,19 @@ void LCD_addWindow(uint16_t Xstart, uint16_t Ystart, uint16_t Xend, uint16_t Yen
   for (size_t i = 0; i < size; i++) {
     color[i] = (((color[i] >> 8) & 0xFF) | ((color[i] << 8) & 0xFF00));
   }
-  // for (size_t i = 0; i < size; i++) {
-  //   color[i] = 0xFFFF;
-  // }
-  Xend = Xend + 1;      // esp_lcd_panel_draw_bitmap: x_end End index on x-axis (x_end not included)
-  Yend = Yend + 1;      // esp_lcd_panel_draw_bitmap: y_end End index on y-axis (y_end not included)
+  // draw_bitmap treats x_end / y_end as exclusive.
+  Xend = Xend + 1;
+  Yend = Yend + 1;
   if (Xend > EXAMPLE_LCD_WIDTH)
     Xend = EXAMPLE_LCD_WIDTH;
   if (Yend > EXAMPLE_LCD_HEIGHT)
     Yend = EXAMPLE_LCD_HEIGHT;
-    
-  // printf("Xstart = %d    Ystart = %d    Xend = %d    Yend = %d \r\n",Xstart, Ystart, Xend, Yend);
-  esp_lcd_panel_draw_bitmap(panel_handle, Xstart, Ystart, Xend, Yend, color);                     // x_end End index on x-axis (x_end not included)
+
+  esp_lcd_panel_draw_bitmap(panel_handle, Xstart, Ystart, Xend, Yend, color);
 }
 
 
 uint8_t LCD_Backlight = 50;
-// backlight
 void Backlight_Init()
 {
   ledcAttach(LCD_Backlight_PIN, Frequency, Resolution);   

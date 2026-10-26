@@ -145,6 +145,7 @@ void es8311_register_dump(es8311_handle_t dev);
  *     - Else fail
  */
 esp_err_t es8311_voice_mute(es8311_handle_t dev, bool enable);
+esp_err_t es8311_dac_standby(es8311_handle_t dev, bool standby);
 
 /**
  * @brief Set Microphone gain

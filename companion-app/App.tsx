@@ -8,10 +8,16 @@ import {
   getStoredSessions,
   clearAllStoredSessions,
 } from './src/services/sessionStorage';
-import { syncSessionFromDevice, startDeviceExamination } from './src/services/deviceSync';
+import {
+  syncSessionFromDevice,
+  startDeviceExamination,
+  clearAudioAttemptHistory,
+  loadRememberedDeviceHost,
+} from './src/services/deviceSync';
 import { refreshSessionsFromCloud } from './src/services/cloudSessions';
 
 import { BottomTabBar, TabKey } from './src/components/BottomTabBar';
+import { VoiceResult } from './src/components/VoiceResult';
 import { DashboardTab } from './src/components/DashboardTab';
 import { ScreenTab } from './src/components/ScreenTab';
 import { GroupsTab } from './src/components/GroupsTab';
@@ -26,11 +32,12 @@ export default function App() {
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [syncNote, setSyncNote] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+  const [voiceNow, setVoiceNow] = useState<SessionRecord | null>(null);
 
-  // Load offline sessions from storage on mount
   const refreshSessions = async () => {
-    const data = await getStoredSessions();
-    setSessions(data);
+    const stored = await getStoredSessions();
+    setSessions(stored);
   };
 
   useEffect(() => {
@@ -38,6 +45,7 @@ export default function App() {
       .then(setSessions)
       .catch(() => refreshSessions());
     getProfile().then(setProfile);
+    void loadRememberedDeviceHost();
   }, []);
 
   const updateProfile = async (next: UserProfile) => {
@@ -45,24 +53,35 @@ export default function App() {
     await saveProfile(next);
   };
 
+  const pullExam = async (forceRetry: boolean = false) => {
+    const syncResult = await syncSessionFromDevice('', () => setListening(true), forceRetry);
+    if (!syncResult.listening) {
+      setListening(false);
+    }
+    if (syncResult.session) {
+      setIsPaired(true);
+    }
+    if (syncResult.fresh && syncResult.session) setVoiceNow(syncResult.session);
+    await refreshSessions();
+    return syncResult;
+  };
+
   useEffect(() => {
-    if (!isPaired) return;
     const timer = setInterval(() => {
-      syncSessionFromDevice('192.168.4.1').then(() => refreshSessions());
+      void pullExam(false);
     }, 4000);
     return () => clearInterval(timer);
-  }, [isPaired]);
+  }, []);
 
-  // Only reached after LabTab validates the live optical particle code.
   const handlePairSuccess = async () => {
+    clearAudioAttemptHistory();
     const kickoff = startDeviceExamination({
       patientName: profile.name,
       patientId: 'PT-8F24',
-      examType: 'RECALL Speech Exam',
+      examType: 'Dementia Dove Speech Exam',
     });
     setIsPaired(true);
     await kickoff;
-    syncSessionFromDevice('192.168.4.1').then(() => refreshSessions());
   };
 
   const handleResetPairing = () => {
@@ -72,14 +91,14 @@ export default function App() {
   const handleSyncData = async () => {
     setSyncState('syncing');
     setSyncNote(null);
-    const result = await syncSessionFromDevice('192.168.4.1');
-    await refreshSessions();
-    if (result.success) {
+    const syncResult = await pullExam(true);
+    if (syncResult.listening) return;
+    if (syncResult.success) {
       setSyncState('success');
       setTimeout(() => setSyncState('idle'), 2500);
       return;
     }
-    setSyncNote(result.message);
+    setSyncNote(syncResult.message);
     setSyncState('error');
   };
 
@@ -94,7 +113,6 @@ export default function App() {
       <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Main Tab Screen Content */}
       <View style={styles.content}>
         {currentTab === 'dashboard' && (
           <DashboardTab isPaired={isPaired} sessions={sessions} displayName={profile.name} />
@@ -108,6 +126,8 @@ export default function App() {
             sessions={sessions}
             syncState={syncState}
             onSync={handleSyncData}
+            profile={profile}
+            onOpenSettings={() => setCurrentTab('account')}
           />
         )}
 
@@ -130,11 +150,20 @@ export default function App() {
         )}
       </View>
 
-      {/* Bottom tabs */}
       <BottomTabBar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
       />
+      {listening || voiceNow ? (
+        <VoiceResult
+          listening={listening}
+          session={voiceNow}
+          onClose={() => {
+            setListening(false);
+            setVoiceNow(null);
+          }}
+        />
+      ) : null}
       </SafeAreaView>
       </View>
     </SafeAreaProvider>

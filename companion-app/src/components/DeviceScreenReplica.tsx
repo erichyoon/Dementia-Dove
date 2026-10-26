@@ -15,21 +15,16 @@ export const DeviceScreenReplica: React.FC<Props> = ({
 }) => {
   return (
     <View style={styles.bezelOuter}>
-      {/* Physical button indicator on top of the bezel */}
       <View style={styles.topPhysicalButtonMarker}>
         <View style={styles.topPinTip} />
         <Text style={styles.topButtonLabel}>GPIO 0 / KEY 1</Text>
       </View>
 
-      {/* Round 1.85-inch Display Screen */}
       <View style={styles.screenInner}>
-        {/* Decorative inner circular guide */}
         <View style={styles.circularGuide} />
 
-        {/* Header label */}
         <Text style={styles.headerTitle}>ESP32-S3 TOUCH</Text>
 
-        {/* 1. White Button with Black Text: "Welcome" */}
         <TouchableOpacity
           activeOpacity={0.75}
           onPress={onPressWelcome}
@@ -38,7 +33,6 @@ export const DeviceScreenReplica: React.FC<Props> = ({
           <Text style={styles.welcomeButtonText}>{state.topButtonText}</Text>
         </TouchableOpacity>
 
-        {/* 2. Button Below: "Start" */}
         <TouchableOpacity
           activeOpacity={0.75}
           onPress={onPressStart}
@@ -50,7 +44,6 @@ export const DeviceScreenReplica: React.FC<Props> = ({
           <Text style={styles.startButtonText}>{state.bottomButtonText}</Text>
         </TouchableOpacity>
 
-        {/* Status indicator subtitle */}
         <Text style={styles.statusSubtitle} numberOfLines={1}>
           {state.statusText}
         </Text>

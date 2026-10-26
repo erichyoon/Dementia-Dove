@@ -28,7 +28,6 @@ export const RemoteControlCard: React.FC<Props> = ({
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>Remote Hardware Controls</Text>
 
-      {/* Primary Action Buttons */}
       <View style={styles.buttonRow}>
         <TouchableOpacity
           activeOpacity={0.8}
@@ -54,7 +53,6 @@ export const RemoteControlCard: React.FC<Props> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Physical Button Emulation Banner */}
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={onTriggerStart}
@@ -66,7 +64,6 @@ export const RemoteControlCard: React.FC<Props> = ({
         </Text>
       </TouchableOpacity>
 
-      {/* Send Custom Text to Screen */}
       <View style={styles.customTextContainer}>
         <TextInput
           style={styles.textInput}

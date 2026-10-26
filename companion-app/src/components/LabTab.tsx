@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, TextInput } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { isValidDeviceOpticalCode } from '../constants/opticalCode';
+import { DEVICE_OPTICAL_CODE, isValidDeviceOpticalCode, parseDeviceOpticalCode } from '../constants/opticalCode';
+import { rememberDeviceHost } from '../services/deviceSync';
 import { colors, shadow } from '../theme';
 import { FolderCard } from './FolderCard';
 import { getProfile } from '../services/profileStorage';
@@ -11,14 +12,23 @@ interface Props {
   isPaired: boolean;
   onPairSuccess: () => void;
   onResetPairing: () => void;
+  onOpenSettings?: () => void;
+  onOpenProgress?: () => void;
 }
 
-export const LabTab: React.FC<Props> = ({ isPaired, onPairSuccess, onResetPairing }) => {
+export const LabTab: React.FC<Props> = ({
+  isPaired,
+  onPairSuccess,
+  onResetPairing,
+  onOpenSettings,
+  onOpenProgress,
+}) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [detectedCode, setDetectedCode] = useState<string | null>(null);
   const [rejectMessage, setRejectMessage] = useState<string | null>(null);
   const [patientName, setPatientName] = useState('Omar Firdaus');
+  const [manualCode, setManualCode] = useState('');
 
   useEffect(() => {
     getProfile().then((profile) => setPatientName(profile.name));
@@ -57,7 +67,11 @@ export const LabTab: React.FC<Props> = ({ isPaired, onPairSuccess, onResetPairin
 
   const handleValidCode = (data: string) => {
     if (isRecognizing || isPaired) return;
-    if (!isValidDeviceOpticalCode(data)) return;
+    const parsed = parseDeviceOpticalCode(data);
+    if (!parsed.valid) return;
+    if (parsed.ip) {
+      void rememberDeviceHost(parsed.ip);
+    }
 
     setRejectMessage(null);
     setIsRecognizing(true);
@@ -99,14 +113,29 @@ export const LabTab: React.FC<Props> = ({ isPaired, onPairSuccess, onResetPairin
     handleValidCode(data);
   };
 
+  const handleManualPair = () => {
+    if (isRecognizing || isPaired) return;
+    const trimmed = manualCode.trim();
+    if (!trimmed) {
+      handleValidCode(DEVICE_OPTICAL_CODE);
+      return;
+    }
+    if (!isValidDeviceOpticalCode(trimmed)) {
+      setRejectMessage('UNRECOGNIZED CODE');
+      if (rejectTimerRef.current) {
+        clearTimeout(rejectTimerRef.current);
+      }
+      rejectTimerRef.current = setTimeout(() => setRejectMessage(null), 1500);
+      return;
+    }
+    handleValidCode(trimmed);
+  };
+
   const scanTranslateY = scanLineAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [-105, 105],
   });
 
-  // =========================================================================
-  // PAIRED CONFIRMATION SCREEN
-  // =========================================================================
   if (isPaired) {
     return (
       <View style={styles.pairedContainer}>
@@ -122,7 +151,7 @@ export const LabTab: React.FC<Props> = ({ isPaired, onPairSuccess, onResetPairin
             </View>
             <Text style={styles.patientInfoTitle}>Sent to hardware</Text>
             <Text style={styles.patientInfoRow}>{patientName} · #PT-8F24</Text>
-            <Text style={styles.patientInfoRow}>RECALL speech exam · T0–T5</Text>
+            <Text style={styles.patientInfoRow}>Dementia Dove speech exam · T0–T5</Text>
             <Text style={styles.pairedSubtext}>
               Put the phone away. Follow the round screen and spoken prompts. Tap Start, then Done, on each task.
             </Text>
@@ -143,22 +172,28 @@ export const LabTab: React.FC<Props> = ({ isPaired, onPairSuccess, onResetPairin
     );
   }
 
-  // =========================================================================
-  // AUTOMATIC CAMERA SCANNER (NO BUTTON TO PRESS)
-  // =========================================================================
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
-        <View style={styles.iconBtn}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Open profile settings"
+          activeOpacity={0.85}
+          style={styles.iconBtn}
+          onPress={onOpenSettings}
+        >
           <Ionicons name="settings-outline" size={18} color={colors.ink} />
-        </View>
+        </TouchableOpacity>
         <View style={styles.topRight}>
-          <View style={styles.iconBtn}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Open screening progress"
+            activeOpacity={0.85}
+            style={styles.iconBtn}
+            onPress={onOpenProgress}
+          >
             <Ionicons name="folder-outline" size={18} color={colors.ink} />
-          </View>
-          <View style={styles.iconBtn}>
-            <Ionicons name="search-outline" size={18} color={colors.ink} />
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -166,11 +201,27 @@ export const LabTab: React.FC<Props> = ({ isPaired, onPairSuccess, onResetPairin
 
       <View style={styles.searchRow}>
         <View style={styles.searchBar}>
-          <Text style={styles.searchPlaceholder}>Point camera at particle code</Text>
+          <TextInput
+            value={manualCode}
+            onChangeText={setManualCode}
+            placeholder={`Point camera or enter ${DEVICE_OPTICAL_CODE}`}
+            placeholderTextColor={colors.muted}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            returnKeyType="go"
+            onSubmitEditing={handleManualPair}
+            style={styles.searchInput}
+          />
         </View>
-        <View style={styles.plusBtn}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Pair with device"
+          activeOpacity={0.85}
+          style={styles.plusBtn}
+          onPress={handleManualPair}
+        >
           <Ionicons name="add" size={22} color={colors.white} />
-        </View>
+        </TouchableOpacity>
       </View>
 
       <Animated.View
@@ -293,6 +344,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     fontWeight: '600',
+  },
+  searchInput: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '800',
+    paddingVertical: 0,
   },
   plusBtn: {
     width: 52,

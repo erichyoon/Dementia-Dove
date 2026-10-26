@@ -12,6 +12,16 @@ export interface VoiceConfidence {
   alzheimer: number;
 }
 
+export function voiceResultLabel(prediction?: string): string {
+  if (prediction === 'Alzheimer' || prediction === 'Dementia' || prediction === 'At risk of dementia') return 'At risk of dementia';
+  return prediction || 'Healthy';
+}
+
+export function voiceResultPercent(prediction: string | undefined, confidence: VoiceConfidence): number {
+  if (prediction === 'Alzheimer' || prediction === 'Dementia' || prediction === 'At risk of dementia') return confidence.alzheimer;
+  return confidence.healthy;
+}
+
 export interface VoiceFeatures {
   duration: number;
   pause_count: number;

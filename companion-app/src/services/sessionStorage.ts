@@ -4,18 +4,18 @@ import { SessionRecord, PatientSummaryStats } from '../types/session';
 const STORAGE_KEY = '@patient_device_sessions_v1';
 const LAST_SYNC_KEY = '@patient_device_last_sync_v1';
 
-// Starter sessions so the patient portal is immediately viewable and useful offline
+// Seeded so Progress is not empty before the first real exam lands on this phone.
 const INITIAL_STARTER_SESSIONS: SessionRecord[] = [
   {
     id: 'sess-101',
-    timestamp: Date.now() - 86400000 * 2, // 2 days ago
+    timestamp: Date.now() - 86400000 * 2,
     dateStr: new Date(Date.now() - 86400000 * 2).toLocaleDateString([], {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     }),
     timeStr: '10:30 AM',
-    durationSeconds: 600, // 10 mins
+    durationSeconds: 600,
     completionStatus: 'completed',
     score: 92,
     buttonPresses: 24,
@@ -32,14 +32,14 @@ const INITIAL_STARTER_SESSIONS: SessionRecord[] = [
   },
   {
     id: 'sess-102',
-    timestamp: Date.now() - 86400000, // Yesterday
+    timestamp: Date.now() - 86400000,
     dateStr: new Date(Date.now() - 86400000).toLocaleDateString([], {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     }),
     timeStr: '02:15 PM',
-    durationSeconds: 720, // 12 mins
+    durationSeconds: 720,
     completionStatus: 'completed',
     score: 96,
     buttonPresses: 31,
@@ -60,7 +60,6 @@ export async function getStoredSessions(): Promise<SessionRecord[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      // First run: save and return starter sample
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_STARTER_SESSIONS));
       return INITIAL_STARTER_SESSIONS;
     }
@@ -79,7 +78,6 @@ export async function replaceStoredSessions(sessions: SessionRecord[]): Promise<
 export async function storeNewSession(session: SessionRecord): Promise<SessionRecord[]> {
   try {
     const current = await getStoredSessions();
-    // Prepend newest session
     const updated = [session, ...current.filter((s) => s.id !== session.id)];
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     await AsyncStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());

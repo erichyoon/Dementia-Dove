@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { SessionRecord, SyncState } from '../types/session';
 import { calculateSummaryStats } from '../services/sessionStorage';
@@ -8,11 +8,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { FolderCard } from './FolderCard';
 import { colors, shadow } from '../theme';
 import { addDays, dayKey, startOfDay } from '../services/days';
+import { DEFAULT_PROFILE, UserProfile } from '../services/profileStorage';
+import { buildWeeklyReport, computeWeeklyDigest, sendReportToDoctor } from '../services/doctorReport';
 
 interface Props {
   sessions: SessionRecord[];
   syncState: SyncState;
   onSync: () => void;
+  profile?: UserProfile;
 }
 
 const BADGES = [
@@ -217,9 +220,16 @@ function ScoreLine({ sessions }: { sessions: SessionRecord[] }) {
   );
 }
 
-export const AnalyticsTab: React.FC<Props> = ({ sessions, syncState, onSync }) => {
+export const AnalyticsTab: React.FC<Props> = ({
+  sessions,
+  syncState,
+  onSync,
+  profile = DEFAULT_PROFILE,
+}) => {
   const stats = calculateSummaryStats(sessions);
   const streak = voiceStreak(sessions);
+  const digest = computeWeeklyDigest(sessions);
+  const doctorTarget = profile.doctorName.trim() || profile.doctorEmail.trim();
   const ordered = [...sessions].sort((a, b) => a.timestamp - b.timestamp);
   const latest = ordered[ordered.length - 1];
   const spanLabel =
@@ -229,6 +239,11 @@ export const AnalyticsTab: React.FC<Props> = ({ sessions, syncState, onSync }) =
         ? dateLabel(ordered[0].timestamp)
         : `${dateLabel(ordered[0].timestamp)} – ${dateLabel(latest.timestamp)}`;
 
+  const handleEmailWeekly = () => {
+    const report = buildWeeklyReport(sessions, profile);
+    void sendReportToDoctor(report, profile);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -236,10 +251,18 @@ export const AnalyticsTab: React.FC<Props> = ({ sessions, syncState, onSync }) =
           <Text style={styles.title}>Progress.</Text>
         </View>
 
-        <View style={styles.syncStatusBadge}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Sync with device"
+          activeOpacity={0.85}
+          style={styles.syncStatusBadge}
+          onPress={onSync}
+        >
           <Ionicons name="shield-checkmark-outline" size={14} color={colors.white} />
-          <Text style={styles.syncStatusText}>CLOUD</Text>
-        </View>
+          <Text style={styles.syncStatusText}>
+            {syncState === 'syncing' ? 'SYNCING…' : 'SYNC'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -338,7 +361,55 @@ export const AnalyticsTab: React.FC<Props> = ({ sessions, syncState, onSync }) =
           </FolderCard>
         </View>
 
-        {/* Section Header */}
+        <FolderCard>
+          <View style={styles.doctorReportCard}>
+            <View style={styles.doctorReportHead}>
+              <View style={styles.kpiIcon}>
+                <Ionicons name="medical-outline" size={18} color={colors.white} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.doctorReportKicker}>{digest.windowLabel.toUpperCase()} AVERAGE</Text>
+                <Text style={styles.sectionTitle}>Health professional report</Text>
+                <Text style={styles.doctorReportSub}>
+                  {profile.doctorEmail.trim()
+                    ? `${profile.doctorName.trim() || 'Doctor'} · ${profile.doctorEmail.trim()}`
+                    : 'Set your doctor’s email in Profile or choose on send'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.doctorMetricsRow}>
+              <View style={styles.doctorMetricBox}>
+                <Text style={styles.doctorMetricVal}>{digest.count}</Text>
+                <Text style={styles.doctorMetricLabel}>SCREENINGS</Text>
+              </View>
+              <View style={styles.doctorMetricBox}>
+                <Text style={styles.doctorMetricVal}>{digest.avgScore}%</Text>
+                <Text style={styles.doctorMetricLabel}>AVG SCORE</Text>
+              </View>
+              <View style={styles.doctorMetricBox}>
+                <Text style={styles.doctorMetricVal}>
+                  {digest.avgPitchHz !== null ? `${digest.avgPitchHz}` : '—'}
+                </Text>
+                <Text style={styles.doctorMetricLabel}>AVG PITCH HZ</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Email weekly screening summary to health professional"
+              activeOpacity={0.85}
+              style={styles.emailWeeklyBtn}
+              onPress={handleEmailWeekly}
+            >
+              <Ionicons name="mail-outline" size={16} color={colors.white} />
+              <Text style={styles.emailWeeklyBtnText}>
+                {doctorTarget ? `Email weekly average to ${doctorTarget}` : 'Email weekly average'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </FolderCard>
+
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>My sessions</Text>
           <Text style={styles.sectionHint}>Tap a card</Text>
@@ -352,7 +423,9 @@ export const AnalyticsTab: React.FC<Props> = ({ sessions, syncState, onSync }) =
             </Text>
           </View>
         ) : (
-          sessions.map((sess) => <SessionCard key={sess.id} session={sess} />)
+          sessions.map((sess) => (
+            <SessionCard key={sess.id} session={sess} profile={profile} onRetrySync={onSync} />
+          ))
         )}
       </ScrollView>
     </View>
@@ -574,5 +647,69 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: colors.ink,
+  },
+  doctorReportCard: {
+    padding: 16,
+    gap: 12,
+  },
+  doctorReportHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  doctorReportKicker: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.muted,
+    letterSpacing: 0.6,
+  },
+  doctorReportSub: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+    marginTop: 2,
+  },
+  doctorMetricsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  doctorMetricBox: {
+    flex: 1,
+    backgroundColor: colors.paper,
+    borderWidth: 2,
+    borderColor: colors.ink,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+  },
+  doctorMetricVal: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.ink,
+  },
+  doctorMetricLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.muted,
+    marginTop: 2,
+  },
+  emailWeeklyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.accent,
+    borderWidth: 3,
+    borderColor: colors.ink,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  emailWeeklyBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.white,
   },
 });

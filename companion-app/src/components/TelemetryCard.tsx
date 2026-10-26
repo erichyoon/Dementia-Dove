@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { DeviceTelemetry } from '../types/device';
 import { Ionicons } from '@expo/vector-icons';
+import { DeviceTelemetry } from '../types/device';
 
 interface Props {
   telemetry: DeviceTelemetry;
@@ -19,7 +19,6 @@ export const TelemetryCard: React.FC<Props> = ({
       <Text style={styles.sectionTitle}>Hardware Telemetry</Text>
 
       <View style={styles.grid}>
-        {/* Battery Monitor (GPIO 8 ADC) */}
         <View style={styles.metricBox}>
           <View style={styles.iconRow}>
             <Ionicons name="battery-charging" size={18} color="#10b981" />
@@ -29,7 +28,6 @@ export const TelemetryCard: React.FC<Props> = ({
           <Text style={styles.metricSub}>{(telemetry.batteryMilliVolts / 1000).toFixed(2)} V</Text>
         </View>
 
-        {/* RTC Clock (PCF85063) */}
         <View style={styles.metricBox}>
           <View style={styles.iconRow}>
             <Ionicons name="time-outline" size={18} color="#38bdf8" />
@@ -41,7 +39,6 @@ export const TelemetryCard: React.FC<Props> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Storage (16MB Flash + SD Card) */}
         <View style={styles.metricBox}>
           <View style={styles.iconRow}>
             <Ionicons name="hardware-chip-outline" size={18} color="#a855f7" />
@@ -53,7 +50,6 @@ export const TelemetryCard: React.FC<Props> = ({
           </Text>
         </View>
 
-        {/* Backlight Control (GPIO 5 PWM) */}
         <View style={styles.metricBox}>
           <View style={styles.iconRow}>
             <Ionicons name="sunny-outline" size={18} color="#f59e0b" />

@@ -27,27 +27,27 @@ export function cloudHosts(): string[] {
   return Array.from(hosts);
 }
 
-function normalizeSession(data: any): SessionRecord {
-  const ts = Number(data.timestamp) || Date.now();
+function normalizeSession(payload: any): SessionRecord {
+  const ts = Number(payload.timestamp) || Date.now();
   const timestamp = ts < 1e12 ? Date.now() : ts;
   const when = new Date(timestamp);
   return {
-    id: data.id || `ts-${timestamp}`,
+    id: payload.id || `ts-${timestamp}`,
     timestamp,
-    dateStr: data.dateStr && data.dateStr !== 'Today' ? data.dateStr : when.toLocaleDateString([], { month: 'short', day: 'numeric' }),
-    timeStr: data.timeStr && data.timeStr !== 'Live' ? data.timeStr : when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    durationSeconds: data.durationSeconds || 1,
-    completionStatus: data.completionStatus || 'completed',
-    score: data.score || 0,
-    buttonPresses: data.buttonPresses || 0,
-    touchInteractions: data.touchInteractions || 0,
-    avgReactionTimeMs: data.avgReactionTimeMs || 0,
-    patientFeedback: data.patientFeedback || 'RECALL speech exam uploaded from hardware.',
-    timeline: data.timeline || [],
-    voicePrediction: data.voicePrediction,
-    voiceConfidence: data.voiceConfidence,
-    voiceFeatures: data.voiceFeatures,
-    voiceStatus: data.voiceStatus,
+    dateStr: payload.dateStr && payload.dateStr !== 'Today' ? payload.dateStr : when.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+    timeStr: payload.timeStr && payload.timeStr !== 'Live' ? payload.timeStr : when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    durationSeconds: payload.durationSeconds || 1,
+    completionStatus: payload.completionStatus || 'completed',
+    score: payload.score || 0,
+    buttonPresses: payload.buttonPresses || 0,
+    touchInteractions: payload.touchInteractions || 0,
+    avgReactionTimeMs: payload.avgReactionTimeMs || 0,
+    patientFeedback: payload.patientFeedback || 'Dementia Dove speech exam uploaded from hardware.',
+    timeline: payload.timeline || [],
+    voicePrediction: payload.voicePrediction,
+    voiceConfidence: payload.voiceConfidence,
+    voiceFeatures: payload.voiceFeatures,
+    voiceStatus: payload.voiceStatus,
   };
 }
 
@@ -76,8 +76,8 @@ export async function pullCloudSessions(): Promise<SessionRecord[] | null> {
       headers: { Accept: 'application/json' },
     });
     if (!response?.ok) continue;
-    const data = await response.json();
-    const list = Array.isArray(data.sessions) ? data.sessions : Array.isArray(data) ? data : [];
+    const payload = await response.json();
+    const list = Array.isArray(payload.sessions) ? payload.sessions : Array.isArray(payload) ? payload : [];
     return list.map(normalizeSession);
   }
   return null;
