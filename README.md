@@ -4,14 +4,28 @@ Self-guided speech screening on a Waveshare **ESP32-S3-Touch-LCD-1.85C**, plus a
 
 The board walks a patient through six speaking tasks, records the microphone, and serves the session over HTTP. The phone pairs with a QR / optical code, pulls the WAV, scores it on-device, and can email a report to a clinician.
 
+## Start here
+
+Read these first. Everything else is support or vendor.
+
+1. `Arduino/examples/omar_buttons/omar_buttons.ino` — exam, Wi-Fi, HTTP API, round UI
+2. `Arduino/examples/omar_buttons/Audio_Voice.cpp` — speaker prompts and microphone capture
+3. `companion-app/App.tsx` — phone tabs, pairing, sync loop
+4. `companion-app/src/services/deviceSync.ts` — find the board and download the WAV
+5. `companion-app/src/services/voice/` — on-device features + SVM score
+6. `companion-app/src/services/doctorReport.ts` — clinician email
+7. `speech-model/` — how the voice model was trained
+
+Vendor LCD/touch helpers live next to the sketch. LVGL stays in `Arduino/libraries/` on the build machine and is not in git.
+
 ## What is in this repo
 
 | Path | Role |
 | --- | --- |
 | `Arduino/examples/omar_buttons/` | Firmware: round LVGL UI, six-task exam, ES8311 audio, Wi-Fi HTTP API |
+| `Arduino/libraries/es8311/` | Codec driver used by the sketch |
 | `companion-app/` | Expo / React Native app: pairing, sync, voice score, progress, doctor email |
 | `speech-model/` | Python training / scoring reference for the voice model |
-| `Arduino/libraries/` | Board libraries used by the sketch (`lvgl`, `es8311`, …) |
 
 ## Hardware
 

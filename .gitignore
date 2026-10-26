@@ -1,5 +1,9 @@
 .DS_Store
 .arduino-build/
+.superpowers/
+Arduino/libraries/lvgl/
+Arduino/libraries/ESP32-audioI2S-master/
+Arduino/libraries/es7210/
 companion-app/node_modules/
 companion-app/.expo/
 companion-app/dist/
